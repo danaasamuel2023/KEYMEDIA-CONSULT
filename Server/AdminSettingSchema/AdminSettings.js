@@ -86,6 +86,6 @@ adminSettingsSchema.statics.updateSettings = async function(updates, userId) {
   return settings;
 };
 
-const AdminSettings = mongoose.model('AdminSettings', adminSettingsSchema);
+const AdminSettings = mongoose.model('AdminSettingskeyMedia', adminSettingsSchema);
 
 module.exports = AdminSettings;

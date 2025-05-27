@@ -88,7 +88,7 @@ export default function PaymentVerification() {
     
     try {
       // Using the verify-payment endpoint from the backend
-      const verifyResponse = await fetch(` https://iget.onrender.com/api/depsoite/verify-payment?reference=${reference}`, {
+      const verifyResponse = await fetch(` https://keymedia-consult.onrender.com/api/depsoite/verify-payment?reference=${reference}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -129,7 +129,7 @@ export default function PaymentVerification() {
   // Fetch wallet balance
   const fetchWalletBalance = async (authToken) => {
     try {
-      const response = await fetch('https://iget.onrender.com/api/iget/balance', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/iget/balance', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${authToken}`,

@@ -72,7 +72,7 @@ export default function UserOrders() {
         throw new Error('Authentication token not found');
       }
       
-      const response = await fetch('https://iget.onrender.com/api/orders/my-orders', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/orders/my-orders', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

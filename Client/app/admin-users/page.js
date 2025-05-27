@@ -90,7 +90,7 @@ export default function UsersManagement() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://iget.onrender.com/api/admin/users', {
+      const response = await axios.get('https://keymedia-consult.onrender.com/api/admin/users', {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -127,7 +127,7 @@ export default function UsersManagement() {
   const fetchUserTransactions = async (userId) => {
     try {
       setTransactionLoading(true);
-      const response = await axios.get(`https://iget.onrender.com/api/admin/users/${userId}/transactions`, {
+      const response = await axios.get(`https://keymedia-consult.onrender.com/api/admin/users/${userId}/transactions`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -181,7 +181,7 @@ export default function UsersManagement() {
 
   const handleDeleteUser = async () => {
     try {
-      await axios.delete(`https://iget.onrender.com/api/admin/users/${selectedUser._id}`, {
+      await axios.delete(`https://keymedia-consult.onrender.com/api/admin/users/${selectedUser._id}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -196,7 +196,7 @@ export default function UsersManagement() {
 
   const handleToggleUserStatus = async () => {
     try {
-      await axios.patch(`https://iget.onrender.com/api/admin/users/${selectedUser._id}/status`, {}, {
+      await axios.patch(`https://keymedia-consult.onrender.com/api/admin/users/${selectedUser._id}/status`, {}, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -215,7 +215,7 @@ export default function UsersManagement() {
 
   const handleDeleteApiKey = async () => {
     try {
-      await axios.delete(`https://iget.onrender.com/api/admin/users/${selectedUser._id}/api-key`, {
+      await axios.delete(`https://keymedia-consult.onrender.com/api/admin/users/${selectedUser._id}/api-key`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -241,7 +241,7 @@ export default function UsersManagement() {
     }
     
     try {
-      const response = await axios.post(`https://iget.onrender.com/api/admin/users/${selectedUser._id}/wallet/deposit`, {
+      const response = await axios.post(`https://keymedia-consult.onrender.com/api/admin/users/${selectedUser._id}/wallet/deposit`, {
         amount: parseFloat(depositAmount),
         description: depositDescription
       }, {
@@ -279,7 +279,7 @@ export default function UsersManagement() {
     }
     
     try {
-      const response = await axios.post(`https://iget.onrender.com/api/admin/users/${selectedUser._id}/wallet/debit`, {
+      const response = await axios.post(`https://keymedia-consult.onrender.com/api/admin/users/${selectedUser._id}/wallet/debit`, {
         amount: parseFloat(debitAmount),
         description: debitDescription
       }, {
@@ -313,7 +313,7 @@ export default function UsersManagement() {
     try {
       console.log(`Changing role for user ${selectedUser._id} to ${newRole}`);
       
-      await axios.patch(`https://iget.onrender.com/api/admin/users/${selectedUser._id}/role`, {
+      await axios.patch(`https://keymedia-consult.onrender.com/api/admin/users/${selectedUser._id}/role`, {
         role: newRole
       }, {
         headers: {

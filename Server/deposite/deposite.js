@@ -7,7 +7,7 @@ const { Transaction, User } = require('../schema/schema');
 const authMiddleware = require('../AuthMiddle/middlewareauth');
 
 // Set your Paystack secret key
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_live_a3c9c9ebae098fe19f77e497977d7fb33c43dabd';
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_live_c1439715d727b2b7561c47b1aa9200c45eadd772';
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
 // Transaction fee percentage (2%)

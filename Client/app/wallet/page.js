@@ -92,7 +92,7 @@ export default function Transactions() {
   
   const fetchWalletBalance = async () => {
     try {
-      const response = await fetch('https://iget.onrender.com/api/iget/balance', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/iget/balance', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -120,7 +120,7 @@ export default function Transactions() {
     
     try {
       // Using the transaction endpoint with pagination
-      const response = await fetch(`https://iget.onrender.com/api/depsoite/transactions?page=${page}&limit=${pageSize}`, {
+      const response = await fetch(`https://keymedia-consult.onrender.com/api/depsoite/transactions?page=${page}&limit=${pageSize}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

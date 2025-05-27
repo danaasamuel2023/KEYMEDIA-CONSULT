@@ -49,7 +49,7 @@ export default function OrdersManagement() {
       setError(null);
       
       // Fetch all orders without pagination for client-side filtering
-      const response = await axios.get(`https://iget.onrender.com/api/orders/all?limit=1000`, {
+      const response = await axios.get(`https://keymedia-consult.onrender.com/api/orders/all?limit=1000`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -165,7 +165,7 @@ export default function OrdersManagement() {
       setLoading(true);
       setError(null);
       
-      const response = await axios.put(`https://iget.onrender.com/api/orders/${orderId}/status`, {
+      const response = await axios.put(`https://keymedia-consult.onrender.com/api/orders/${orderId}/status`, {
         status: newStatus,
         senderID: senderID // Include senderID in the request
       }, {
@@ -214,7 +214,7 @@ export default function OrdersManagement() {
       setError(null);
       
       const updatePromises = selectedOrders.map(orderId => 
-        axios.put(`https://iget.onrender.com/api/orders/${orderId}/status`, {
+        axios.put(`https://keymedia-consult.onrender.com/api/orders/${orderId}/status`, {
           status: newStatus,
           senderID: senderID // Include senderID in the request
         }, {

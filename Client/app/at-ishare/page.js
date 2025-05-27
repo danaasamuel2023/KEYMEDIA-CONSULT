@@ -30,7 +30,7 @@ const ATFlexiNetBundleCards = () => {
         }
         
         // Make API request with authorization header
-        const response = await axios.get('https://iget.onrender.com/api/iget/bundle', {
+        const response = await axios.get('https://keymedia-consult.onrender.com/api/iget/bundle', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -102,7 +102,7 @@ const ATFlexiNetBundleCards = () => {
     try {
       // Call the placeorder endpoint (same as in the MTN component)
       const response = await axios.post(
-        'https://iget.onrender.com/api/orders/placeorder',
+        'https://keymedia-consult.onrender.com/api/orders/placeorder',
         {
           recipientNumber: phoneNumber,
           capacity: bundle.capacity,

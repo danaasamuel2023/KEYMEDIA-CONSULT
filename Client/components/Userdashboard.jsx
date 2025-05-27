@@ -29,7 +29,7 @@ export default function TodayStats() {
           return;
         }
         
-        const response = await fetch('https://iget.onrender.com/api/today/stats', {
+        const response = await fetch('https://keymedia-consult.onrender.com/api/today/stats', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',

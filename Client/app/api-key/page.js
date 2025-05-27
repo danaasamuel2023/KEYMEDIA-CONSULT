@@ -14,7 +14,7 @@ const ApiKeyManager = () => {
   const fetchApiKey = async () => {
     try {
       setApiKeyData(prev => ({ ...prev, loading: true }));
-      const response = await axios.get('https://iget.onrender.com/api/v1/api-key', {
+      const response = await axios.get('https://keymedia-consult.onrender.com/api/v1/api-key', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -39,7 +39,7 @@ const ApiKeyManager = () => {
   const generateApiKey = async () => {
     try {
       setActionLoading(true);
-      const response = await axios.post('https://iget.onrender.com/api/v1/generate-api-key', {}, {
+      const response = await axios.post('https://keymedia-consult.onrender.com/api/v1/generate-api-key', {}, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -64,7 +64,7 @@ const ApiKeyManager = () => {
   const revokeApiKey = async () => {
     try {
       setActionLoading(true);
-      await axios.delete('https://iget.onrender.com/api/v1/api-key', {
+      await axios.delete('https://keymedia-consult.onrender.com/api/v1/api-key', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -162,7 +162,7 @@ const ApiKeyManager = () => {
             <code>
               {`
 // Example API request
-fetch('https://iget.onrender.com/endpoint', {
+fetch('https://keymedia-consult.onrender.com/endpoint', {
   headers: {
     'x-api-key': '${apiKeyData.apiKey.replace('••••••••', '[YOUR_FULL_API_KEY]')}'
   }

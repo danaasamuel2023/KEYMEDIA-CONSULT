@@ -90,7 +90,7 @@ export default function Auth() {
     setError('');
     
     try {
-      const endpoint = isLogin ? 'https://iget.onrender.com/api/login' : 'https://iget.onrender.com/api/register';
+      const endpoint = isLogin ? 'https://keymedia-consult.onrender.com/api/login' : 'https://keymedia-consult.onrender.com/api/register';
       
       const response = await fetch(endpoint, {
         method: 'POST',

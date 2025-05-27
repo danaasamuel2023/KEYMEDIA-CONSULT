@@ -81,7 +81,7 @@ export default function Deposit() {
   
   const fetchWalletBalance = async () => {
     try {
-      const response = await fetch('https://iget.onrender.com/api/iget/balance', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/iget/balance', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -130,7 +130,7 @@ export default function Deposit() {
       const amountInPesewas = Math.round(parseFloat(amount) * 100);
       
       // Using the correct deposit endpoint that matches the backend
-      const response = await fetch('https://iget.onrender.com/api/depsoite/deposit', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/depsoite/deposit', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

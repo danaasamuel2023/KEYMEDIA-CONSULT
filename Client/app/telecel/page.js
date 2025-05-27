@@ -25,7 +25,7 @@ const TelecelBundleCards = () => {
         const token = localStorage.getItem('igettoken');
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
         
-        const response = await axios.get('https://iget.onrender.com/api/iget/bundle', { headers });
+        const response = await axios.get('https://keymedia-consult.onrender.com/api/iget/bundle', { headers });
         
         // If the API returns userRole, save it
         if (response.data.userRole) {
@@ -111,7 +111,7 @@ const TelecelBundleCards = () => {
       
       // Send all the required fields that the backend expects
       const response = await axios.post(
-        'https://iget.onrender.com/api/orders/placeorder',
+        'https://keymedia-consult.onrender.com/api/orders/placeorder',
         {
           recipientNumber: recipientNumber,
           capacity: selectedBundle.capacity,

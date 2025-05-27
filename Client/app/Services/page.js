@@ -118,7 +118,7 @@ export default function BundlesPage() {
     const fetchBundles = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('https://iget.onrender.com/api/iget/bundle', {
+        const response = await axios.get('https://keymedia-consult.onrender.com/api/iget/bundle', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('igettoken')}`
           }

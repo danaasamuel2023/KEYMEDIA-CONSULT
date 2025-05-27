@@ -27,7 +27,7 @@ const BundleFilter = () => {
         const token = localStorage.getItem('igettoken');
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
         
-        const response = await axios.get('https://iget.onrender.com/api/iget/bundle', { headers });
+        const response = await axios.get('https://keymedia-consult.onrender.com/api/iget/bundle', { headers });
         
         // Set bundles from the response
         setBundles(response.data.data);
@@ -100,7 +100,7 @@ const BundleFilter = () => {
       
       // Send the required fields that the backend expects
       const response = await axios.post(
-        'https://iget.onrender.com/api/orders/placeorder',
+        'https://keymedia-consult.onrender.com/api/orders/placeorder',
         {
           recipientNumber: recipientNumber,
           capacity: selectedBundle.capacity,

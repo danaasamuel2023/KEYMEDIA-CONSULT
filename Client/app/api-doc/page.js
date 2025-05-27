@@ -8,7 +8,7 @@ export default function ApiDocumentation() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Head>
-        <title>Iget API Documentation</title>
+        <title>KEYMEDIA Consult  API Documentation</title>
         <meta name="description" content="API documentation for the Iget platform" />
       </Head>
 
@@ -218,7 +218,7 @@ export default function ApiDocumentation() {
                 <h3 className="text-lg font-semibold mt-6 mb-3 dark:text-gray-200">Example Request</h3>
                 <div className="bg-gray-800 text-green-400 p-3 rounded-lg overflow-x-auto">
                   <pre>
-{`curl -X POST https://iget.onrender.com/api/developer/orders/place \\
+{`curl -X POST https://keymedia-consult.onrender.com/api/developer/orders/place \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: your_api_key_here" \\
   -d '{
@@ -358,7 +358,7 @@ export default function ApiDocumentation() {
                 <h3 className="text-lg font-semibold mt-6 mb-3 dark:text-gray-200">Example Request</h3>
                 <div className="bg-gray-800 text-green-400 p-3 rounded-lg overflow-x-auto">
                   <pre>
-{`curl -X GET https://iget.onrender.com/api/developer/orders/reference/ORD-123456 \\
+{`curl -X GET https://keymedia-consult.onrender.com/api/developer/orders/reference/ORD-123456 \\
   -H "X-API-Key: your_api_key_here"`}
                   </pre>
                 </div>

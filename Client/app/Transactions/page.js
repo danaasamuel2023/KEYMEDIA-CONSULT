@@ -23,7 +23,7 @@ export default function TransactionHistory() {
     try {
       setLoading(true);
       // Add pagination and filtering directly to the API call
-      const response = await axios.get('https://iget.onrender.com/api/admin/transactions', {
+      const response = await axios.get('https://keymedia-consult.onrender.com/api/admin/transactions', {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('igettoken')}`
         },

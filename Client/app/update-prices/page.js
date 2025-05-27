@@ -52,7 +52,7 @@ const BundlePriceList = () => {
       
       // Fetch all bundle types in parallel
       const requests = bundleTypes.map(type => 
-        axios.get(`https://iget.onrender.com/api/iget/bundle/${type}`, {
+        axios.get(`https://keymedia-consult.onrender.com/api/iget/bundle/${type}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
         .then(response => {
@@ -148,7 +148,7 @@ const BundlePriceList = () => {
         Editor: parseFloat(editPrices.Editor)
       };
       
-      await axios.put(`https://iget.onrender.com/api/iget/${bundleId}`, {
+      await axios.put(`https://keymedia-consult.onrender.com/api/iget/${bundleId}`, {
         price: parseFloat(editPrices.standard),
         rolePricing
       }, {

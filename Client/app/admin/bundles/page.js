@@ -46,7 +46,7 @@ const BundleManagement = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('igettoken');
-      const response = await axios.get(`https://iget.onrender.com/api/iget/bundle/${type}`, {
+      const response = await axios.get(`https://keymedia-consult.onrender.com/api/iget/bundle/${type}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setBundles(response.data.data);
@@ -166,13 +166,13 @@ const BundleManagement = () => {
       
       if (editingBundle) {
         // Update existing bundle
-        await axios.put(`https://iget.onrender.com/api/iget/${editingBundle}`, data, {
+        await axios.put(`https://keymedia-consult.onrender.com/api/iget/${editingBundle}`, data, {
           headers: { Authorization: `Bearer ${token}` }
         });
         showMessage('success', 'Bundle updated successfully');
       } else {
         // Add new bundle
-        await axios.post('https://iget.onrender.com/api/iget/addbundle', data, {
+        await axios.post('https://keymedia-consult.onrender.com/api/iget/addbundle', data, {
           headers: { Authorization: `Bearer ${token}` }
         });
         showMessage('success', 'Bundle added successfully');
@@ -207,7 +207,7 @@ const BundleManagement = () => {
     
     try {
       const token = localStorage.getItem('igettoken');
-      await axios.delete(`https://iget.onrender.com/api/iget/${id}`, {
+      await axios.delete(`https://keymedia-consult.onrender.com/api/iget/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

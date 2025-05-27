@@ -50,7 +50,7 @@ export default function TopSales() {
         return;
       }
       
-      const res = await axios.get('https://iget.onrender.com/api/admin/top-sales-users', {
+      const res = await axios.get('https://keymedia-consult.onrender.com/api/admin/top-sales-users', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -102,7 +102,7 @@ export default function TopSales() {
         return;
       }
       
-      const res = await axios.post('https://iget.onrender.com/api/admin/reward-top-performers', {
+      const res = await axios.post('https://keymedia-consult.onrender.com/api/admin/reward-top-performers', {
         percentages: percentages,
         description: `Performance reward for top sales from ${formatDate(period.from)} to ${formatDate(period.to)}`
       }, {

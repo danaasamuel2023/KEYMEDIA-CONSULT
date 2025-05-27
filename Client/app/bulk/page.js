@@ -133,7 +133,7 @@ const BulkPurchaseComponent = () => {
       const token = localStorage.getItem('igettoken');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       
-      const response = await fetch('https://iget.onrender.com/api/iget/bundle', { 
+      const response = await fetch('https://keymedia-consult.onrender.com/api/iget/bundle', { 
         headers 
       });
       
@@ -184,7 +184,7 @@ const BulkPurchaseComponent = () => {
         return;
       }
       
-      const response = await fetch('https://iget.onrender.com/api/iget/balance', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/iget/balance', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -231,7 +231,7 @@ const BulkPurchaseComponent = () => {
         return;
       }
       
-      const response = await fetch('https://iget.onrender.com/api/orders/bulk-purchase', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/orders/bulk-purchase', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

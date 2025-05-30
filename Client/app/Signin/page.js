@@ -167,7 +167,7 @@ export default function Auth() {
   return (
     <div className={containerClass}>
       <Head>
-        <title>{isLogin ? 'Login' : 'Sign Up'} | IGet</title>
+        <title>{isLogin ? 'Login' : 'Sign Up'} | KEYMEDIA CONSULT</title>
         <meta name="description" content="Authentication page" />
       </Head>
       

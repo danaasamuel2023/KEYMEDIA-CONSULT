@@ -4,7 +4,7 @@ const router = express.Router();
 const { User } = require('../schema/schema');
 const auth = require('../AuthMiddle/middlewareauth'); 
 const adminAuth = require('../adminMiddlware/middleware'); 
-const ARKESEL_API_KEY = 'OnFqOUpMZXYyVGRFZHJWMmo=';
+const ARKESEL_API_KEY = 'aEdrSktIT0NZVlRWRkVTUWl4UXo';
 const axios = require('axios');
 
 /**

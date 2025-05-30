@@ -47,7 +47,7 @@ export default function AdminLayout({ children }) {
 
         // Verify with backend if local storage doesn't confirm admin status
         try {
-          const response = await axios.get('https://iget.onrender.com/api/admin/my-permissions', {
+          const response = await axios.get('https://keymedia-consult.onrender.com/api/admin/my-permissions', {
             headers: {
               Authorization: `Bearer ${token}`
             }
@@ -107,7 +107,7 @@ export default function AdminLayout({ children }) {
 
   const fetchAdminPermissions = async (token) => {
     try {
-      const response = await axios.get('https://iget.onrender.com/api/admin/my-permissions', {
+      const response = await axios.get('https://keymedia-consult.onrender.com/api/admin/my-permissions', {
         headers: {
           Authorization: `Bearer ${token}`
         }

@@ -56,7 +56,7 @@ const SMSMessaging = () => {
   const fetchUsers = async () => {
     try {
       const authAxios = createAuthAxios();
-      const response = await authAxios.get('https://iget.onrender.com/api/admin/users');
+      const response = await authAxios.get('https://keymedia-consult.onrender.com/api/admin/users');
       setUsers(response.data.data || []);
     } catch (err) {
       showError('Failed to fetch users. Please check your connection.');
@@ -68,7 +68,7 @@ const SMSMessaging = () => {
   const checkSmsBalance = async () => {
     try {
       const authAxios = createAuthAxios();
-      const response = await authAxios.get('https://iget.onrender.com/api/messages/sms-balance');
+      const response = await authAxios.get('https://keymedia-consult.onrender.com/api/messages/sms-balance');
       setSmsBalance(response.data.data);
     } catch (err) {
       console.error('Error checking SMS balance:', err);
@@ -119,7 +119,7 @@ const SMSMessaging = () => {
       setError(null);
       
       const authAxios = createAuthAxios();
-      const response = await authAxios.post('https://iget.onrender.com/api/messages/send-to-all', {
+      const response = await authAxios.post('https://keymedia-consult.onrender.com/api/messages/send-to-all', {
         message,
         senderID,
         filters
@@ -153,7 +153,7 @@ const SMSMessaging = () => {
       setError(null);
       
       const authAxios = createAuthAxios();
-      const response = await authAxios.post('https://iget.onrender.com/api/messages/send-to-selected', {
+      const response = await authAxios.post('https://keymedia-consult.onrender.com/api/messages/send-to-selected', {
         message,
         senderID,
         userIds: selectedUsers
@@ -183,7 +183,7 @@ const SMSMessaging = () => {
       setError(null);
       
       const authAxios = createAuthAxios();
-      const response = await authAxios.post(`http://localhost:5000/api/messages/send-to-user/${userId}`, {
+      const response = await authAxios.post(`https://keymedia-consult.onrender.com/api/messages/send-to-user/${userId}`, {
         message,
         senderID
       });

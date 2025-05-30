@@ -33,7 +33,7 @@ const DashboardPage = () => {
     try {
       setLoading(true);
       
-      const response = await fetch('https://iget.onrender.com/api/dashboard/today', {
+      const response = await fetch('https://keymedia-consult.onrender.com/api/dashboard/today', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

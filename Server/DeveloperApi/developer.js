@@ -5,7 +5,6 @@ const { Order, User, Transaction, Bundle } = require('../schema/schema');
 const apiAuth = require('../middlewareApi/ApiAuth');
 const { ApiLog } = require('../schema/schema');
 const mongoose = require('mongoose');
-const AdminSettings = require('../AdminSettingSchema/AdminSettings.js'); // Import Admin Settings model
 
 /**
  * @route   POST /api/v1/orders/place
@@ -54,7 +53,7 @@ router.post('/orders/place', apiAuth, async (req, res) => {
     if (user.wallet.balance < price) {
       return res.status(400).json({
         success: false,
-        message: `Insufficient balance in wallet. Required: ${price} ${user.wallet.currency}`
+        message: `Insufficient balance in wallet. Required: ${price} ${user.wallet.currency}, Available: ${user.wallet.balance} ${user.wallet.currency}`
       });
     }
     
@@ -63,38 +62,42 @@ router.post('/orders/place', apiAuth, async (req, res) => {
     session.startTransaction();
     
     try {
-      // Create new order with bundle details directly embedded
-      // Always set status to 'pending' - no external API calls
+      // Generate unique order reference
+      const orderReference = Math.floor(100000 + Math.random() * 900000);
+      
+      // Create new order - ALWAYS PENDING (NO EXTERNAL API CALLS)
       const newOrder = new Order({
         user: req.user.id,
         bundleType: bundleType,
         capacity: capacity,
         price: price,
         recipientNumber: recipientNumber,
-        status: 'pending', // Always pending for manual processing
-        updatedAt: Date.now()
+        status: 'pending', // Always pending - no external API integration
+        orderReference: orderReference.toString(),
+        updatedAt: Date.now(),
+        // Clear all API-related fields since we don't use external APIs
+        apiReference: null,
+        hubnetReference: null,
+        // Add metadata to track API source
+        metadata: {
+          source: 'api',
+          apiVersion: 'v1',
+          orderPlacedAt: new Date(),
+          noExternalApiCall: true
+        }
       });
       
-      // Generate unique order reference for all order types
-      const orderReference = Math.floor(1000 + Math.random() * 900000);
-      newOrder.orderReference = orderReference.toString();
-      
-      // No external API calls - all orders are set to pending for manual processing
-      console.log(`Order for bundle type ${bundleType} set to pending for manual processing. No external API integration.`);
-      
-      // Clear any API-related fields since we're not using external APIs
-      newOrder.apiReference = null;
-      newOrder.hubnetReference = null;
+      console.log(`API Order ${orderReference} for bundle type ${bundleType} - set to pending for manual processing (NO EXTERNAL API CALLS)`);
       
       await newOrder.save({ session });
       
-      // Create transaction record
+      // Create transaction record - money is deducted
       const transaction = new Transaction({
         user: req.user.id,
         type: 'purchase',
         amount: price,
         currency: user.wallet.currency,
-        description: `API: Bundle purchase: ${capacity}GB for ${recipientNumber}`,
+        description: `API Order: ${capacity}MB ${bundleType} for ${recipientNumber}`,
         status: 'completed',
         reference: 'API-TXN-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         orderId: newOrder._id,
@@ -105,7 +108,7 @@ router.post('/orders/place', apiAuth, async (req, res) => {
       
       await transaction.save({ session });
       
-      // Update user's wallet balance
+      // Update user's wallet balance - MONEY IS DEDUCTED
       user.wallet.balance -= price;
       user.wallet.transactions.push(transaction._id);
       await user.save({ session });
@@ -114,10 +117,12 @@ router.post('/orders/place', apiAuth, async (req, res) => {
       await session.commitTransaction();
       session.endSession();
       
+      console.log(`API Order ${orderReference} placed successfully. User balance updated: ${user.wallet.balance}`);
+      
       // Return the created order
       res.status(201).json({
         success: true,
-        message: 'Order placed successfully and set for manual processing',
+        message: 'Order placed successfully via API and set for manual processing',
         data: {
           order: {
             id: newOrder._id,
@@ -135,7 +140,12 @@ router.post('/orders/place', apiAuth, async (req, res) => {
             amount: transaction.amount,
             status: transaction.status
           },
-          walletBalance: user.wallet.balance
+          walletBalance: user.wallet.balance,
+          processing: {
+            method: 'manual',
+            note: 'Order will be processed manually by system administrators',
+            externalApiUsed: false
+          }
         }
       });
       
@@ -205,13 +215,19 @@ router.get('/orders/reference/:orderRef', apiAuth, async (req, res) => {
           status: order.status,
           createdAt: order.createdAt,
           completedAt: order.completedAt,
-          failureReason: order.failureReason
+          failureReason: order.failureReason,
+          processedManually: true // Indicate this is processed manually
         },
         transaction: transaction ? {
           reference: transaction.reference,
           amount: transaction.amount,
           status: transaction.status
-        } : null
+        } : null,
+        processingInfo: {
+          method: 'manual',
+          externalApiUsed: false,
+          note: 'All orders are processed manually by system administrators'
+        }
       }
     });
   } catch (error) {
@@ -220,6 +236,100 @@ router.get('/orders/reference/:orderRef', apiAuth, async (req, res) => {
       success: false, 
       message: 'Server error', 
       error: error.message 
+    });
+  }
+});
+
+/**
+ * @route   GET /api/v1/account/balance
+ * @desc    Get user wallet balance via API
+ * @access  Private (API Key)
+ */
+router.get('/account/balance', apiAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('wallet username');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        username: user.username,
+        balance: user.wallet.balance,
+        currency: user.wallet.currency,
+        lastUpdated: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching balance via API:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   GET /api/v1/orders/my-orders
+ * @desc    Get user's orders via API
+ * @access  Private (API Key)
+ */
+router.get('/orders/my-orders', apiAuth, async (req, res) => {
+  try {
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    // Filter parameters
+    const filter = { user: req.user.id };
+    
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+    
+    if (req.query.bundleType) {
+      filter.bundleType = req.query.bundleType;
+    }
+    
+    // Get total count
+    const total = await Order.countDocuments(filter);
+    
+    // Get orders
+    const orders = await Order.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('-user'); // Don't return user field for security
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        orders,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalOrders: total,
+          ordersPerPage: limit
+        },
+        processingInfo: {
+          method: 'manual',
+          note: 'All orders are processed manually - no external API integration'
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user orders via API:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
     });
   }
 });

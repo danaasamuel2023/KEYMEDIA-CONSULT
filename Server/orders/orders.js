@@ -12,7 +12,7 @@ const AdminSettings = require('../AdminSettingSchema/AdminSettings.js');
 const auth = require('../AuthMiddle/middlewareauth.js');
 const adminAuth = require('../adminMiddlware/middleware.js');
 
-const ARKESEL_API_KEY = 'OnFqOUpMZXYyVGRGZHJWMmo=';
+const ARKESEL_API_KEY = 'aEdrSktIT0NZVlRWRkVTUWl4UXo';
 
 // Middleware for Editor-only actions
 const requireEditor = (req, res, next) => {
@@ -76,7 +76,7 @@ const sendSMS = async (phoneNumber, message, options = {}) => {
   const {
     scheduleTime = null,
     useCase = null,
-    senderID = 'EL VENDER'
+    senderID = 'KeyMediaCon'
   } = options;
 
   // Input validation
@@ -839,6 +839,7 @@ router.get('/trends/weekly', adminAuth, validateModelsAndDb, async (req, res) =>
 });
 
 // POST place order (main endpoint with API integration)
+// POST place order (main endpoint - NO API INTEGRATION, PENDING ONLY)
 router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
   try {
     const { recipientNumber, capacity, price, bundleType } = req.body;
@@ -868,208 +869,35 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
       });
     }
     
-    // Get admin settings to check if API integrations are enabled
-    let adminSettings;
-    try {
-      adminSettings = await AdminSettings.getSettings();
-    } catch (settingsError) {
-      console.error('Error fetching admin settings:', settingsError);
-      // Continue with default settings if AdminSettings fails
-      adminSettings = { apiIntegrations: {} };
-    }
-    
     // Start a session for the transaction
     const session = await mongoose.startSession();
     session.startTransaction();
     
     try {
-      // Create new order - initially with 'pending' status
+      // Generate order reference
+      const orderReference = Math.floor(1000 + Math.random() * 900000);
+      
+      // Create new order - ALWAYS SET TO PENDING (NO API CALLS)
       const newOrder = new Order({
         user: req.user.id,
         bundleType: bundleType,
         capacity: capacity,
         price: price,
         recipientNumber: recipientNumber,
-        status: 'pending',
-        updatedAt: Date.now()
+        status: 'pending', // Always pending - no API integration
+        orderReference: orderReference.toString(),
+        updatedAt: Date.now(),
+        // Clear any API references since we're not using APIs
+        apiReference: null,
+        hubnetReference: null
       });
       
-      // Generate order reference
-      const orderReference = Math.floor(1000 + Math.random() * 900000);
-      newOrder.orderReference = orderReference.toString();
+      console.log(`Order created for bundle type ${bundleType} - set to pending for Editor processing (NO API CALLS).`);
       
-      // For mtnup2u bundle types, check if API is enabled
-      if (bundleType.toLowerCase() === 'mtnup2u') {
-        // Check if MTN Hubnet API integration is enabled
-        const mtnApiEnabled = adminSettings.apiIntegrations?.mtnHubnetEnabled !== false; // Default to true if setting doesn't exist
-        
-        if (mtnApiEnabled) {
-          try {
-            // Calculate volume in MB (in case the capacity is in GB)
-            let volumeInMB = capacity;
-            if (capacity < 100) { // Assuming small numbers represent GB
-              volumeInMB = parseFloat(capacity) * 1000;
-            }
-            
-            // Log the Hubnet API request for debugging
-            console.log('Making Hubnet API request for mtnup2u bundle');
-            console.log('Request payload:', {
-              phone: recipientNumber,
-              volume: volumeInMB,
-              reference: orderReference,
-              referrer: recipientNumber
-            });
-            
-            // Make request to Hubnet API
-            const hubnetResponse = await fetch(`https://console.hubnet.app/live/api/context/business/transaction/mtn-new-transaction`, {
-              method: 'POST',
-              headers: {
-                'token': 'Bearer biWUr20SFfp8W33BRThwqTkg2PhoaZTkeWx',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                phone: recipientNumber,
-                volume: volumeInMB,
-                reference: orderReference,
-                referrer: recipientNumber,
-                webhook: ''
-              })
-            });
-            
-            const hubnetData = await hubnetResponse.json();
-            
-            console.log('Hubnet API Response:', hubnetData);
-            
-            if (!hubnetResponse.ok) {
-              console.error('Hubnet order failed:', hubnetData);
-              return res.status(400).json({
-                success: false,
-                message: 'Hubnet API purchase failed. No payment has been processed.',
-                error: hubnetData.message || 'Unknown error'
-              });
-            }
-            
-            // Update order with Hubnet reference
-            newOrder.apiReference = orderReference.toString();
-            newOrder.hubnetReference = orderReference.toString();
-            
-            // Set status to pending for Editor approval
-            newOrder.status = 'pending';
-            
-            console.log(`Hubnet mtn order placed successfully: ${orderReference}`);
-          } catch (apiError) {
-            console.error('Error calling Hubnet API:', apiError.message);
-            if (apiError.response) {
-              console.error('Response status:', apiError.response.status);
-              console.error('Response data:', apiError.response.data);
-            }
-            
-            return res.status(400).json({
-              success: false,
-              message: 'Hubnet API connection error. No payment has been processed.',
-              error: apiError.message,
-              details: apiError.response?.data || 'Connection error'
-            });
-          }
-        } else {
-          // API is disabled, set order to pending for manual processing
-          console.log('MTN Hubnet API integration is disabled. Order set to pending for manual processing.');
-          newOrder.status = 'pending';
-          newOrder.apiReference = null;
-          newOrder.hubnetReference = null;
-        }
-      }
-      // For AT-ishare bundle type, check if API is enabled
-      else if (bundleType.toLowerCase() === 'at-ishare') {
-        // Check if AT Hubnet API integration is enabled
-        const atApiEnabled = adminSettings.apiIntegrations?.atHubnetEnabled !== false; // Default to true if setting doesn't exist
-        
-        if (atApiEnabled) {
-          try {
-            // Calculate volume in MB (in case the capacity is in GB)
-            let volumeInMB = capacity;
-            if (capacity < 100) { // Assuming small numbers represent GB
-              volumeInMB = parseFloat(capacity) * 1000;
-            }
-            
-            // Log the Hubnet API request for debugging
-            console.log('Making Hubnet API request for AT-ishare bundle');
-            console.log('Request payload:', {
-              phone: recipientNumber,
-              volume: volumeInMB,
-              reference: orderReference,
-              referrer: recipientNumber
-            });
-            
-            // Make request to Hubnet API
-            const hubnetResponse = await fetch(`https://console.hubnet.app/live/api/context/business/transaction/at-new-transaction`, {
-              method: 'POST',
-              headers: {
-                'token': 'Bearer biWUr20SFfp8W33BRThwqTkg2PhoaZTkeWx',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                phone: recipientNumber,
-                volume: volumeInMB,
-                reference: orderReference,
-                referrer: recipientNumber,
-                webhook: ''
-              })
-            });
-            
-            const hubnetData = await hubnetResponse.json();
-            
-            console.log('Hubnet API Response:', hubnetData);
-            
-            if (!hubnetResponse.ok) {
-              console.error('Hubnet order failed:', hubnetData);
-              return res.status(400).json({
-                success: false,
-                message: 'Hubnet API purchase failed. No payment has been processed.',
-                error: hubnetData.message || 'Unknown error'
-              });
-            }
-            
-            // Update order with Hubnet reference
-            newOrder.apiReference = orderReference.toString();
-            newOrder.hubnetReference = orderReference.toString();
-            
-            // Set status to pending for Editor approval
-            newOrder.status = 'pending';
-            
-            console.log(`Hubnet AT order placed successfully: ${orderReference}`);
-          } catch (apiError) {
-            console.error('Error calling Hubnet API:', apiError.message);
-            if (apiError.response) {
-              console.error('Response status:', apiError.response.status);
-              console.error('Response data:', apiError.response.data);
-            }
-            
-            return res.status(400).json({
-              success: false,
-              message: 'Hubnet API connection error. No payment has been processed.',
-              error: apiError.message,
-              details: apiError.response?.data || 'Connection error'
-            });
-          }
-        } else {
-          // API is disabled, set order to pending for manual processing
-          console.log('AT Hubnet API integration is disabled. Order set to pending for manual processing.');
-          newOrder.status = 'pending';
-          newOrder.apiReference = null;
-          newOrder.hubnetReference = null;
-        }
-      }
-      // For other bundle types, continue with normal processing
-      else {
-        // Other bundle types don't use API, so they'll remain in pending status
-        console.log(`Order for bundle type ${bundleType} set to pending for Editor processing.`);
-      }
-      
-      // Only proceed with saving order and processing payment
+      // Save the order
       await newOrder.save({ session });
       
-      // Create transaction record
+      // Create transaction record - deduct money from user
       const transaction = new Transaction({
         user: req.user.id,
         type: 'purchase',
@@ -1086,7 +914,7 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
       
       await transaction.save({ session });
       
-      // Update user's wallet balance
+      // Update user's wallet balance - MONEY IS DEDUCTED
       user.wallet.balance -= price;
       user.wallet.transactions.push(transaction._id);
       await user.save({ session });
@@ -1094,6 +922,8 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
       // Commit the transaction
       await session.commitTransaction();
       session.endSession();
+      
+      console.log(`Order ${orderReference} placed successfully. User balance updated: ${user.wallet.balance}`);
       
       // Return the created order
       res.status(201).json({
@@ -1117,7 +947,11 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
             status: transaction.status
           },
           walletBalance: user.wallet.balance,
-          note: 'Your order is pending and will be processed by our Editors'
+          note: 'Your order is pending and will be processed by our Editors. Payment has been deducted from your wallet.',
+          apiIntegration: {
+            enabled: false,
+            note: 'All orders are processed manually by Editors - no automatic API calls'
+          }
         }
       });
       
@@ -1128,7 +962,7 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
       throw error;
     }
     
-  } catch (error) {
+  } catch (error) {W
     console.error('Error placing order:', error);
     res.status(500).json({
       success: false,
@@ -1137,7 +971,6 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
     });
   }
 });
-
 // GET today's orders and revenue for admin
 router.get('/today/admin', adminAuth, validateModelsAndDb, async (req, res) => {
   try {

@@ -129,7 +129,7 @@ const Navigation = () => {
    // Fetch user balance from API
    const fetchUserBalance = async (token) => {
      try {
-       const response = await fetch('https://iget.onrender.com/api/iget/balance', {
+       const response = await fetch('https://keymedia-consult.onrender.com/api/iget/balance', {
          method: 'GET',
          headers: {
            'Authorization': `Bearer ${token}`,

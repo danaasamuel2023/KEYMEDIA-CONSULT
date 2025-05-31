@@ -14,7 +14,7 @@ export default function ApiDocumentation() {
 
       <header className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg">
         <div className="container mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold">Iget API Documentation</h1>
+          <h1 className="text-3xl font-bold">KEYMEDIA API Documentation</h1>
           <p className="mt-2 text-purple-100">Bundle Management API</p>
         </div>
       </header>

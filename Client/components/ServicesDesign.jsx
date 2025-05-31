@@ -127,9 +127,9 @@ const DashboardPage = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center">
               <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-lg">ID</span>
+                <span className="text-white font-bold text-lg">KDC</span>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">Iget</h1>
+              <h1 className="text-2xl font-bold text-gray-900">KEYMEDIA CONSULT</h1>
             </div>
             <div className="flex items-center text-gray-600">
               <Calendar className="h-5 w-5 mr-2" />

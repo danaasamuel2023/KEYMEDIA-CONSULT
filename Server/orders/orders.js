@@ -1,4 +1,4 @@
-// routes/orders.js - Updated with proper model imports and Editor-only order status updates
+// routes/orders.js - Updated with KeyMedia Consult branding
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();
@@ -76,7 +76,7 @@ const sendSMS = async (phoneNumber, message, options = {}) => {
   const {
     scheduleTime = null,
     useCase = null,
-    senderID = 'KeyMediaCon'
+    senderID = 'KeyMedia' // Updated default sender ID
   } = options;
 
   // Input validation
@@ -531,7 +531,7 @@ router.get('/user/:userId', adminAuth, validateModelsAndDb, async (req, res) => 
  */
 router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (req, res) => {
   try {
-    const { status, senderID = 'EL VENDER', sendSMSNotification = true, failureReason } = req.body;
+    const { status, senderID = 'KeyMedia', sendSMSNotification = true, failureReason } = req.body;
     
     if (!status) {
       return res.status(400).json({
@@ -643,15 +643,15 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
             switch(order.bundleType?.toLowerCase()) {
               case 'mtnup2u':
                 const dataAmount = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-                completionMessage = `${dataAmount} has been credited to ${order.recipientNumber} and is valid for 3 months.`;
+                completionMessage = `${dataAmount} has been credited to ${order.recipientNumber} and is valid for 3 months.\nKeyMedia Consult`;
                 break;
               case 'telecel-5959':
                 const dataSizeGB = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-                completionMessage = `${dataSizeGB} has been allocated to ${order.recipientNumber} and is valid for 2 months.`;
+                completionMessage = `${dataSizeGB} has been allocated to ${order.recipientNumber} and is valid for 2 months.\nKeyMedia Consult`;
                 break;
               default:
                 const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-                completionMessage = `${dataSize} has been sent to ${order.recipientNumber}.\niGet`;
+                completionMessage = `${dataSize} has been sent to ${order.recipientNumber}.\nKeyMedia Consult`;
                 break;
             }
             
@@ -671,10 +671,10 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
             
             // Handle AFA-registration bundle type differently
             if (order.bundleType && order.bundleType.toLowerCase() === 'afa-registration') {
-              refundMessage = `Your AFA registration has been cancelled. The amount has been reversed to your iGet balance. Kindly check your iGet balance to confirm.\niGet`;
+              refundMessage = `Your AFA registration has been cancelled. The amount has been reversed to your KeyMedia Consult balance. Kindly check your balance to confirm.\nKeyMedia Consult`;
             } else {
               const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-              refundMessage = `Your ${dataSize} order to ${order.recipientNumber} failed. The amount has been reversed to your iGet balance. Kindly check your iGet balance to confirm.\niGet`;
+              refundMessage = `Your ${dataSize} order to ${order.recipientNumber} failed. The amount has been reversed to your KeyMedia Consult balance. Kindly check your balance to confirm.\nKeyMedia Consult`;
             }
             
             smsResult = await sendSMS(userPhone, refundMessage, {
@@ -962,7 +962,7 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
       throw error;
     }
     
-  } catch (error) {W
+  } catch (error) {
     console.error('Error placing order:', error);
     res.status(500).json({
       success: false,
@@ -971,6 +971,7 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
     });
   }
 });
+
 // GET today's orders and revenue for admin
 router.get('/today/admin', adminAuth, validateModelsAndDb, async (req, res) => {
   try {

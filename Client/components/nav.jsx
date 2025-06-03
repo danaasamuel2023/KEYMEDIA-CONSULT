@@ -434,7 +434,7 @@ const Navigation = () => {
                        className="rounded-lg"
                      />
                    </div>
-                   <span className="ml-3 font-bold text-xl text-white">iGet</span>
+                   <span className="ml-3 font-bold text-xl text-white">Keymedia </span>
                  </div>
                  <button 
                    onClick={toggleMenu}

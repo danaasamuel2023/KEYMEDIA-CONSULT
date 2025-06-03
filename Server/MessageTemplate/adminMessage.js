@@ -4,7 +4,7 @@ const router = express.Router();
 const { User } = require('../schema/schema');
 const auth = require('../AuthMiddle/middlewareauth'); 
 const adminAuth = require('../adminMiddlware/middleware'); 
-const ARKESEL_API_KEY = 'aEdrSktIT0NZVlRWRkVTUWl4UXo';
+const ARKESEL_API_KEY = 'UmdjREpmZ0pkcWt3a1RVUlNrd3k';
 const axios = require('axios');
 
 /**
@@ -18,7 +18,7 @@ const sendSMS = async (phoneNumber, message, options = {}) => {
   const {
     scheduleTime = null,
     useCase = null,
-    senderID = 'EL VENDER'
+    senderID = 'KeyMediaCon'
   } = options;
 
   // Input validation

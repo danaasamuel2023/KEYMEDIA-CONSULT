@@ -12,7 +12,7 @@ const AdminSettings = require('../AdminSettingSchema/AdminSettings.js');
 const auth = require('../AuthMiddle/middlewareauth.js');
 const adminAuth = require('../adminMiddlware/middleware.js');
 
-const ARKESEL_API_KEY = 'aEdrSktIT0NZVlRWRkVTUWl4UXo';
+const ARKESEL_API_KEY = 'UmdjREpmZ0pkcWt3a1RVUlNrd3k';
 
 // Middleware for Editor-only actions
 const requireEditor = (req, res, next) => {

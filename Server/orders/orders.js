@@ -76,7 +76,7 @@ const sendSMS = async (phoneNumber, message, options = {}) => {
   const {
     scheduleTime = null,
     useCase = null,
-    senderID = 'KeyMedia' // Updated default sender ID
+    senderID = 'KeyMediaCon' // Updated default sender ID
   } = options;
 
   // Input validation

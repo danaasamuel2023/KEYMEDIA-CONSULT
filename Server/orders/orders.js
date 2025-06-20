@@ -1,4 +1,4 @@
-// routes/orders.js - Updated with KeyMedia Consult branding
+// routes/orders.js - Updated with KeyMedia Consult branding and mNotify SMS
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();
@@ -12,7 +12,12 @@ const AdminSettings = require('../AdminSettingSchema/AdminSettings.js');
 const auth = require('../AuthMiddle/middlewareauth.js');
 const adminAuth = require('../adminMiddlware/middleware.js');
 
-const ARKESEL_API_KEY = 'UmdjREpmZ0pkcWt3a1RVUlNrd3k';
+// mNotify SMS configuration for KeyMedia Consult
+const SMS_CONFIG = {
+  API_KEY: 'iIXE2cLk0MPy5cZ9gwRhtdj7F',
+  SENDER_ID: 'KeyMediaCon',
+  BASE_URL: 'https://apps.mnotify.net/smsapi'
+};
 
 // Middleware for Editor-only actions
 const requireEditor = (req, res, next) => {
@@ -71,93 +76,144 @@ const validateModelsAndDb = (req, res, next) => {
   next();
 };
 
-// SMS sending function
-const sendSMS = async (phoneNumber, message, options = {}) => {
-  const {
-    scheduleTime = null,
-    useCase = null,
-    senderID = 'KeyMediaCon' // Updated default sender ID
-  } = options;
-
-  // Input validation
-  if (!phoneNumber || !message) {
-    throw new Error('Phone number and message are required');
+/**
+ * Format phone number to Ghana format for mNotify
+ * @param {string} phone - Phone number to format
+ * @returns {string} - Formatted phone number
+ */
+const formatPhoneNumberForMnotify = (phone) => {
+  if (!phone) return '';
+  
+  // Remove all non-numeric characters
+  let cleaned = phone.replace(/\D/g, '');
+  
+  // If number starts with 0, replace with 233
+  if (cleaned.startsWith('0')) {
+    cleaned = '233' + cleaned.substring(1);
   }
-
-  // Base parameters
-  const params = {
-    action: 'send-sms',
-    api_key: ARKESEL_API_KEY,
-    to: phoneNumber,
-    from: senderID,
-    sms: message
-  };
-
-  // Add optional parameters
-  if (scheduleTime) {
-    params.schedule = scheduleTime;
+  
+  // If number doesn't start with country code, add it
+  if (!cleaned.startsWith('233')) {
+    cleaned = '233' + cleaned;
   }
+  
+  return cleaned;
+};
 
-  if (useCase && ['promotional', 'transactional'].includes(useCase)) {
-    params.use_case = useCase;
-  }
-
-  // Add Nigerian use case if phone number starts with 234
-  if (phoneNumber.startsWith('234') && !useCase) {
-    params.use_case = 'transactional';
-  }
-
+/**
+ * Send SMS notification using mNotify
+ * @param {string} to - Recipient phone number
+ * @param {string} message - Message to send
+ * @param {Object} options - Additional options (for compatibility with existing code)
+ * @returns {Promise<Object>} - SMS API response
+ */
+const sendSMS = async (to, message, options = {}) => {
   try {
-    const response = await axios.get('https://sms.arkesel.com/sms/api', {
-      params,
-      timeout: 10000 // 10 second timeout
-    });
-
-    // Map error codes to meaningful messages
-    const errorCodes = {
-      '100': 'Bad gateway request',
-      '101': 'Wrong action',
-      '102': 'Authentication failed',
-      '103': 'Invalid phone number',
-      '104': 'Phone coverage not active',
-      '105': 'Insufficient balance',
-      '106': 'Invalid Sender ID',
-      '109': 'Invalid Schedule Time',
-      '111': 'SMS contains spam word. Wait for approval'
-    };
-
-    if (response.data.code !== 'ok') {
-      const errorMessage = errorCodes[response.data.code] || 'Unknown error occurred';
-      throw new Error(`SMS sending failed: ${errorMessage}`);
+    // Use senderID from options or default to KeyMediaCon
+    const senderID = options.senderID || SMS_CONFIG.SENDER_ID;
+    
+    const formattedPhone = formatPhoneNumberForMnotify(to);
+    
+    // Validate phone number
+    if (!formattedPhone || formattedPhone.length < 12) {
+      throw new Error('Invalid phone number format');
     }
-
-    console.log('SMS sent successfully:', {
-      to: phoneNumber,
-      status: response.data.code,
-      balance: response.data.balance,
-      mainBalance: response.data.main_balance
+    
+    // Construct SMS API URL
+    const url = `${SMS_CONFIG.BASE_URL}?key=${SMS_CONFIG.API_KEY}&to=${formattedPhone}&msg=${encodeURIComponent(message)}&sender_id=${senderID}`;
+    
+    // Send SMS request
+    const response = await axios.get(url);
+    
+    // Log the full response for debugging
+    console.log('mNotify SMS API Response:', {
+      status: response.status,
+      data: response.data,
+      dataType: typeof response.data,
+      to: formattedPhone,
+      senderID: senderID
     });
-
-    return {
-      success: true,
-      data: response.data
-    };
-
+    
+    // Handle different response formats
+    let responseCode;
+    
+    if (typeof response.data === 'number') {
+      responseCode = response.data;
+    } else if (typeof response.data === 'string') {
+      const match = response.data.match(/\d+/);
+      if (match) {
+        responseCode = parseInt(match[0]);
+      } else {
+        responseCode = parseInt(response.data.trim());
+      }
+    } else if (typeof response.data === 'object' && response.data.code) {
+      responseCode = parseInt(response.data.code);
+    }
+    
+    if (isNaN(responseCode)) {
+      console.error('Could not parse mNotify response code from:', response.data);
+      if (response.status === 200) {
+        return { success: true, message: 'SMS sent (assumed successful)', rawResponse: response.data };
+      }
+      throw new Error(`Invalid response format: ${JSON.stringify(response.data)}`);
+    }
+    
+    // Handle response codes
+    switch (responseCode) {
+      case 1000:
+        console.log(`✅ SMS sent successfully to ${formattedPhone} via mNotify`);
+        return { 
+          success: true, 
+          message: 'SMS sent successfully', 
+          code: responseCode,
+          data: {
+            code: 'ok',
+            balance: response.data.balance || 'N/A',
+            main_balance: response.data.main_balance || 'N/A'
+          }
+        };
+      case 1002:
+        throw new Error('SMS sending failed');
+      case 1003:
+        throw new Error('Insufficient SMS balance');
+      case 1004:
+        throw new Error('Invalid API key');
+      case 1005:
+        throw new Error('Invalid phone number');
+      case 1006:
+        throw new Error('Invalid Sender ID. Sender ID must not be more than 11 Characters');
+      case 1007:
+        return { 
+          success: true, 
+          message: 'SMS scheduled for later delivery', 
+          code: responseCode,
+          data: {
+            code: 'ok',
+            scheduled: true
+          }
+        };
+      case 1008:
+        throw new Error('Empty message');
+      case 1011:
+        throw new Error('Numeric Sender IDs are not allowed');
+      case 1012:
+        throw new Error('Sender ID is not registered. Please contact support at senderids@mnotify.com');
+      default:
+        throw new Error(`Unknown response code: ${responseCode}`);
+    }
   } catch (error) {
-    // Handle specific error types
     if (error.response) {
-      console.error('SMS API responded with error:', {
+      console.error('mNotify SMS API Error Response:', {
         status: error.response.status,
+        statusText: error.response.statusText,
         data: error.response.data
       });
-    } else if (error.request) {
-      console.error('No response received from SMS API:', error.message);
-    } else {
-      console.error('SMS request setup error:', error.message);
     }
-
-    return {
-      success: false,
+    console.error('mNotify SMS Error:', error.message);
+    
+    // Return error object compatible with existing code
+    return { 
+      success: false, 
       error: {
         message: error.message,
         code: error.response?.data?.code,
@@ -531,7 +587,7 @@ router.get('/user/:userId', adminAuth, validateModelsAndDb, async (req, res) => 
  */
 router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (req, res) => {
   try {
-    const { status, senderID = 'KeyMedia', sendSMSNotification = true, failureReason } = req.body;
+    const { status, senderID = 'KeyMediaCon', sendSMSNotification = true, failureReason } = req.body;
     
     if (!status) {
       return res.status(400).json({
@@ -627,14 +683,10 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
     let smsResult = null;
     if (sendSMSNotification) {
       try {
-        // Format phone number for SMS - remove the '+' prefix
-        const formatPhoneForSms = (phone) => {
-          return phone.replace(/^\+233/, '');
-        };
-        
         // Get the user's phone who placed the order
         if (order.user && order.user.phone) {
-          const userPhone = formatPhoneForSms(order.user.phone);
+          // Use mNotify formatting for phone numbers
+          const userPhone = formatPhoneNumberForMnotify(order.user.phone);
           
           if (status === 'completed' && previousStatus !== 'completed') {
             // Determine which SMS template to use based on bundleType
@@ -719,7 +771,8 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
       smsNotification: sendSMSNotification ? {
         attempted: true,
         success: smsResult?.success || false,
-        error: smsResult?.error?.message || null
+        error: smsResult?.error?.message || null,
+        provider: 'mNotify'
       } : {
         attempted: false
       }
@@ -838,7 +891,6 @@ router.get('/trends/weekly', adminAuth, validateModelsAndDb, async (req, res) =>
   }
 });
 
-// POST place order (main endpoint with API integration)
 // POST place order (main endpoint - NO API INTEGRATION, PENDING ONLY)
 router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
   try {

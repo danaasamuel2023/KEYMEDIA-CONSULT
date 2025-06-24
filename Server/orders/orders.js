@@ -1,4 +1,4 @@
-// routes/orders.js - Updated with KeyMedia Consult branding and mNotify SMS
+// routes/orders.js - Updated with working SMS implementation
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();
@@ -12,10 +12,10 @@ const AdminSettings = require('../AdminSettingSchema/AdminSettings.js');
 const auth = require('../AuthMiddle/middlewareauth.js');
 const adminAuth = require('../adminMiddlware/middleware.js');
 
-// mNotify SMS configuration for KeyMedia Consult
+// mNotify SMS configuration - FIXED with working API key
 const SMS_CONFIG = {
-  API_KEY: 'iIXE2cLk0MPy5cZ9gwRhtdj7F',
-  SENDER_ID: 'KeyMediaCon',
+  API_KEY: process.env.MNOTIFY_API_KEY || 'iIXE2cLk0MPy5cZ9gwRhtdj7F', // Working API key
+  SENDER_ID: process.env.MNOTIFY_SENDER_ID || 'KeyMediaCon', // Working sender ID
   BASE_URL: 'https://apps.mnotify.net/smsapi'
 };
 
@@ -24,7 +24,7 @@ const requireEditor = (req, res, next) => {
   console.log('📝 RequireEditor middleware - checking user role:', req.user?.role);
   
   if (!req.user || !['admin', 'Editor'].includes(req.user.role)) {
-    return res.status(403).json({
+    return res.status(403).json({ 
       success: false,
       message: 'Editor privileges required for order status updates',
       yourRole: req.user?.role,
@@ -87,6 +87,11 @@ const formatPhoneNumberForMnotify = (phone) => {
   // Remove all non-numeric characters
   let cleaned = phone.replace(/\D/g, '');
   
+  // Validate minimum length
+  if (cleaned.length < 9) {
+    throw new Error('Phone number too short');
+  }
+  
   // If number starts with 0, replace with 233
   if (cleaned.startsWith('0')) {
     cleaned = '233' + cleaned.substring(1);
@@ -97,44 +102,68 @@ const formatPhoneNumberForMnotify = (phone) => {
     cleaned = '233' + cleaned;
   }
   
+  // Validate Ghana phone number format
+  if (!cleaned.match(/^233[0-9]{9}$/)) {
+    throw new Error('Invalid Ghana phone number format');
+  }
+  
   return cleaned;
 };
 
 /**
- * Send SMS notification using mNotify
+ * Send SMS notification using mNotify - FIXED VERSION
  * @param {string} to - Recipient phone number
  * @param {string} message - Message to send
- * @param {Object} options - Additional options (for compatibility with existing code)
+ * @param {Object} options - Additional options
  * @returns {Promise<Object>} - SMS API response
  */
 const sendSMS = async (to, message, options = {}) => {
   try {
-    // Use senderID from options or default to KeyMediaCon
+    // Check if SMS is properly configured
+    if (!SMS_CONFIG.API_KEY) {
+      console.warn('SMS service not configured - skipping SMS notification');
+      return { 
+        success: false, 
+        error: { message: 'SMS service not configured' },
+        skipped: true
+      };
+    }
+    
+    // Validate inputs
+    if (!to || !message) {
+      return { success: false, error: { message: 'Phone number and message are required' } };
+    }
+    
+    if (message.length > 918) { // mNotify SMS limit
+      return { success: false, error: { message: 'Message too long (max 918 characters)' } };
+    }
+    
+    // Use senderID from options or default
     const senderID = options.senderID || SMS_CONFIG.SENDER_ID;
     
+    // Validate and format phone number
     const formattedPhone = formatPhoneNumberForMnotify(to);
-    
-    // Validate phone number
-    if (!formattedPhone || formattedPhone.length < 12) {
-      throw new Error('Invalid phone number format');
-    }
     
     // Construct SMS API URL
     const url = `${SMS_CONFIG.BASE_URL}?key=${SMS_CONFIG.API_KEY}&to=${formattedPhone}&msg=${encodeURIComponent(message)}&sender_id=${senderID}`;
     
-    // Send SMS request
-    const response = await axios.get(url);
+    // Send SMS request with timeout
+    const response = await axios.get(url, { 
+      timeout: 15000,
+      headers: {
+        'User-Agent': 'KeyMediaConsult/1.0'
+      }
+    });
     
-    // Log the full response for debugging
+    // Log the response for debugging
     console.log('mNotify SMS API Response:', {
       status: response.status,
       data: response.data,
-      dataType: typeof response.data,
       to: formattedPhone,
       senderID: senderID
     });
     
-    // Handle different response formats
+    // SIMPLIFIED RESPONSE HANDLING (like the working admin version)
     let responseCode;
     
     if (typeof response.data === 'number') {
@@ -150,76 +179,101 @@ const sendSMS = async (to, message, options = {}) => {
       responseCode = parseInt(response.data.code);
     }
     
+    // LESS STRICT: Assume success if we can't parse but HTTP is OK
     if (isNaN(responseCode)) {
       console.error('Could not parse mNotify response code from:', response.data);
       if (response.status === 200) {
         return { success: true, message: 'SMS sent (assumed successful)', rawResponse: response.data };
       }
-      throw new Error(`Invalid response format: ${JSON.stringify(response.data)}`);
+      return { success: false, error: { message: `Invalid response format: ${JSON.stringify(response.data)}` } };
     }
     
     // Handle response codes
     switch (responseCode) {
       case 1000:
-        console.log(`✅ SMS sent successfully to ${formattedPhone} via mNotify`);
+        console.log(`✅ SMS sent successfully to ${formattedPhone}`);
         return { 
           success: true, 
           message: 'SMS sent successfully', 
           code: responseCode,
           data: {
-            code: 'ok',
-            balance: response.data.balance || 'N/A',
-            main_balance: response.data.main_balance || 'N/A'
+            recipient: formattedPhone,
+            senderID: senderID,
+            messageLength: message.length
           }
         };
+        
       case 1002:
-        throw new Error('SMS sending failed');
+        return { success: false, error: { message: 'SMS sending failed - delivery error' } };
+        
       case 1003:
-        throw new Error('Insufficient SMS balance');
+        return { success: false, error: { message: 'Insufficient SMS balance in mNotify account' } };
+        
       case 1004:
-        throw new Error('Invalid API key');
+        return { success: false, error: { message: 'Invalid mNotify API key' } };
+        
       case 1005:
-        throw new Error('Invalid phone number');
+        return { success: false, error: { message: `Invalid phone number: ${formattedPhone}` } };
+        
       case 1006:
-        throw new Error('Invalid Sender ID. Sender ID must not be more than 11 Characters');
+        return { success: false, error: { message: `Invalid Sender ID: ${senderID} (must be max 11 characters)` } };
+        
       case 1007:
+        console.log(`📅 SMS scheduled for later delivery to ${formattedPhone}`);
         return { 
           success: true, 
-          message: 'SMS scheduled for later delivery', 
+          message: 'SMS scheduled for delivery', 
           code: responseCode,
           data: {
-            code: 'ok',
+            recipient: formattedPhone,
             scheduled: true
           }
         };
+        
       case 1008:
-        throw new Error('Empty message');
+        return { success: false, error: { message: 'Empty message content' } };
+        
       case 1011:
-        throw new Error('Numeric Sender IDs are not allowed');
+        return { success: false, error: { message: 'Numeric Sender IDs are not allowed' } };
+        
       case 1012:
-        throw new Error('Sender ID is not registered. Please contact support at senderids@mnotify.com');
+        return { success: false, error: { message: `Sender ID '${senderID}' is not registered. Contact senderids@mnotify.com` } };
+        
       default:
-        throw new Error(`Unknown response code: ${responseCode}`);
+        return { success: false, error: { message: `Unknown mNotify response code: ${responseCode}` } };
     }
+    
   } catch (error) {
+    // Handle errors like the working admin version
+    if (error.code === 'ECONNABORTED') {
+      console.error('SMS API request timeout');
+      return { success: false, error: { message: 'SMS API request timeout' } };
+    }
+    
     if (error.response) {
       console.error('mNotify SMS API Error Response:', {
         status: error.response.status,
         statusText: error.response.statusText,
         data: error.response.data
       });
+      
+      return { 
+        success: false, 
+        error: {
+          message: `SMS API error: ${error.response.status} - ${error.response.statusText}`,
+          code: error.response.status,
+          details: error.response.data
+        }
+      };
     }
-    console.error('mNotify SMS Error:', error.message);
     
-    // Return error object compatible with existing code
-    return { 
-      success: false, 
-      error: {
-        message: error.message,
-        code: error.response?.data?.code,
-        details: error.response?.data
-      }
-    };
+    if (error.request) {
+      console.error('SMS API network error - no response received');
+      return { success: false, error: { message: 'Network error - SMS API unreachable' } };
+    }
+    
+    console.error('SMS send error:', error.message);
+    return { success: false, error: { message: error.message } };
   }
 };
 
@@ -582,12 +636,12 @@ router.get('/user/:userId', adminAuth, validateModelsAndDb, async (req, res) => 
 
 /**
  * @route   PUT /api/orders/:id/status
- * @desc    Update order status (EDITOR ROLE ONLY)
+ * @desc    Update order status (EDITOR ROLE ONLY) - FIXED SMS
  * @access  Editor/Admin
  */
 router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (req, res) => {
   try {
-    const { status, senderID = 'KeyMediaCon', sendSMSNotification = true, failureReason } = req.body;
+    const { status, senderID = 'DataMartGH', sendSMSNotification = true, failureReason } = req.body;
     
     if (!status) {
       return res.status(400).json({
@@ -685,7 +739,7 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
       try {
         // Get the user's phone who placed the order
         if (order.user && order.user.phone) {
-          // Use mNotify formatting for phone numbers
+          // Use working mNotify formatting for phone numbers
           const userPhone = formatPhoneNumberForMnotify(order.user.phone);
           
           if (status === 'completed' && previousStatus !== 'completed') {
@@ -695,15 +749,15 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
             switch(order.bundleType?.toLowerCase()) {
               case 'mtnup2u':
                 const dataAmount = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-                completionMessage = `${dataAmount} has been credited to ${order.recipientNumber} and is valid for 3 months.\nKeyMedia Consult`;
+                completionMessage = `${dataAmount} has been credited to ${order.recipientNumber} and is valid for 3 months.\nDataMartGH`;
                 break;
               case 'telecel-5959':
                 const dataSizeGB = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-                completionMessage = `${dataSizeGB} has been allocated to ${order.recipientNumber} and is valid for 2 months.\nKeyMedia Consult`;
+                completionMessage = `${dataSizeGB} has been allocated to ${order.recipientNumber} and is valid for 2 months.\nDataMartGH`;
                 break;
               default:
                 const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-                completionMessage = `${dataSize} has been sent to ${order.recipientNumber}.\nKeyMedia Consult`;
+                completionMessage = `${dataSize} has been sent to ${order.recipientNumber}.\nDataMartGH`;
                 break;
             }
             
@@ -723,10 +777,10 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
             
             // Handle AFA-registration bundle type differently
             if (order.bundleType && order.bundleType.toLowerCase() === 'afa-registration') {
-              refundMessage = `Your AFA registration has been cancelled. The amount has been reversed to your KeyMedia Consult balance. Kindly check your balance to confirm.\nKeyMedia Consult`;
+              refundMessage = `Your AFA registration has been cancelled. The amount has been reversed to your DataMartGH balance. Kindly check your balance to confirm.\nDataMartGH`;
             } else {
               const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
-              refundMessage = `Your ${dataSize} order to ${order.recipientNumber} failed. The amount has been reversed to your KeyMedia Consult balance. Kindly check your balance to confirm.\nKeyMedia Consult`;
+              refundMessage = `Your ${dataSize} order to ${order.recipientNumber} failed. The amount has been reversed to your DataMartGH balance. Kindly check your balance to confirm.\nDataMartGH`;
             }
             
             smsResult = await sendSMS(userPhone, refundMessage, {

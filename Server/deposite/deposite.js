@@ -86,7 +86,7 @@ const initiateDeposit = async (req, res) => {
         email: email,
         amount: totalAmount, // Total amount in kobo (pesewas) including fee
         reference: reference,
-        callback_url: `https://console.igetghana.com//verify?reference=${reference}`,
+        callback_url: `https://console.keymediadataconsult.com/Signin//verify?reference=${reference}`,
         metadata: {
           userId: user._id.toString(),
           transactionId: transaction._id.toString(),
@@ -216,7 +216,7 @@ const verifyTransaction = async (req, res) => {
     // Redirect or respond based on context
     if (req.headers['accept'] && req.headers['accept'].includes('text/html')) {
       // Redirect to a success page if accessed via browser
-      return res.redirect(`https://www.datamartgh.shop/payment/success?reference=${reference}`);
+      return res.redirect(`https://console.keymediadataconsult.com/payment/success?reference=${reference}`);
     } else {
       // Return JSON if API call
       return res.status(200).json({

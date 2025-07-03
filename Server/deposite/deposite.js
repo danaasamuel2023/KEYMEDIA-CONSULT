@@ -86,7 +86,7 @@ const initiateDeposit = async (req, res) => {
         email: email,
         amount: totalAmount, // Total amount in kobo (pesewas) including fee
         reference: reference,
-        callback_url: `https://console.keymediadataconsult.com/Signin//verify?reference=${reference}`,
+        callback_url: `https://console.keymediadataconsult.com/verify?reference=${reference}`,
         metadata: {
           userId: user._id.toString(),
           transactionId: transaction._id.toString(),

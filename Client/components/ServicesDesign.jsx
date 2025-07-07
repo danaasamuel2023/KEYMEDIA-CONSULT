@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Package, Database, DollarSign, Calendar, Clock } from 'lucide-react';
+import { CreditCard, Package, Database, DollarSign, Calendar, Clock, Phone } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 const DashboardPage = () => {
@@ -131,9 +131,15 @@ const DashboardPage = () => {
               </div>
               <h1 className="text-2xl font-bold text-gray-900">KEYMEDIA CONSULT</h1>
             </div>
-            <div className="flex items-center text-gray-600">
-              <Calendar className="h-5 w-5 mr-2" />
-              <span>{today}</span>
+            <div className="flex items-center gap-6">
+              <div className="flex items-center text-gray-600">
+                <Phone className="h-5 w-5 mr-2 text-blue-500" />
+                <span className="font-medium">Support: 0202633813</span>
+              </div>
+              <div className="flex items-center text-gray-600">
+                <Calendar className="h-5 w-5 mr-2" />
+                <span>{today}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -284,6 +290,18 @@ const DashboardPage = () => {
                 <CreditCard className="h-6 w-6 mb-2" />
                 <span className="text-sm font-medium">Add Funds</span>
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Support Contact Info */}
+        <div className="mt-8 bg-blue-50 rounded-lg p-6 border border-blue-200">
+          <div className="flex items-center justify-center">
+            <Phone className="h-6 w-6 mr-3 text-blue-600" />
+            <div className="text-center">
+              <p className="text-sm text-gray-600">Need assistance? Contact our support team</p>
+              <p className="text-lg font-bold text-blue-600 mt-1">0202633813</p>
+              <p className="text-xs text-gray-500 mt-1">Available Monday - Friday, 8:00 AM - 6:00 PM</p>
             </div>
           </div>
         </div>

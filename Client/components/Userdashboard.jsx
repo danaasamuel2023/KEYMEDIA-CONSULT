@@ -332,6 +332,6 @@ export default function TodayStats() {
           </div>
         </div>
       </div>
-    </div>
+    </div>  
   );
 }

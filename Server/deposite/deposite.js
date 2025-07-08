@@ -22,10 +22,10 @@ const initiateDeposit = async (req, res) => {
     const userId = req.user.id;
 
     // Validate input
-    if (!amount || amount <= 0) {
+    if (!amount || amount <= 10) {
       return res.status(400).json({
         success: false,
-        message: 'Valid amount is required'
+        message: 'Amount must be greater than 9 GHS'
       });
     }
 

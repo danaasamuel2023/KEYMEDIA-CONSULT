@@ -106,19 +106,33 @@ export default function Deposit() {
   const handleAmountSelect = (value) => {
     setAmount(value);
     setCustomAmount('');
+    setError(''); // Clear any existing error
   };
   
   const handleCustomAmountChange = (e) => {
     const value = e.target.value;
     setCustomAmount(value);
     setAmount(value);
+    
+    // Clear error when user starts typing
+    if (error) {
+      setError('');
+    }
   };
   
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!amount || parseFloat(amount) <= 0) {
+    // Validate amount
+    const numericAmount = parseFloat(amount);
+    
+    if (!amount || isNaN(numericAmount)) {
       setError('Please enter a valid amount');
+      return;
+    }
+    
+    if (numericAmount < 10) {
+      setError('Minimum deposit amount is GHS 10.00');
       return;
     }
     
@@ -127,7 +141,7 @@ export default function Deposit() {
     
     try {
       // Convert to pesewas as required by the backend
-      const amountInPesewas = Math.round(parseFloat(amount) * 100);
+      const amountInPesewas = Math.round(numericAmount * 100);
       
       // Using the correct deposit endpoint that matches the backend
       const response = await fetch('https://keymedia-consult.onrender.com/api/depsoite/deposit', {
@@ -259,9 +273,9 @@ export default function Deposit() {
                       id="customAmount"
                       value={customAmount}
                       onChange={handleCustomAmountChange}
-                      min="1"
+                      min="10"
                       step="0.01"
-                      placeholder="Enter amount"
+                      placeholder="Enter amount (min. GHS 10)"
                       className={`block w-full pl-12 pr-4 py-3 border ${
                         darkMode 
                           ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-500 focus:border-blue-500' 
@@ -269,14 +283,17 @@ export default function Deposit() {
                       } rounded-lg`}
                     />
                   </div>
+                  <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Minimum deposit amount: GHS 10.00
+                  </p>
                 </div>
                 
                 {/* Payment Button */}
                 <button
                   type="submit"
-                  disabled={isLoading || !amount}
+                  disabled={isLoading || !amount || parseFloat(amount) < 10}
                   className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium text-white ${
-                    isLoading || !amount
+                    isLoading || !amount || parseFloat(amount) < 10
                       ? darkMode ? 'bg-gray-700 cursor-not-allowed' : 'bg-gray-400 cursor-not-allowed'
                       : darkMode ? 'bg-blue-700 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700'
                   } transition-colors`}
@@ -299,6 +316,10 @@ export default function Deposit() {
               <div className={`mt-8 ${darkMode ? 'bg-gray-800' : 'bg-gray-50'} rounded-lg p-4`}>
                 <h3 className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Payment Information</h3>
                 <ul className={`space-y-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Minimum deposit amount is GHS 10.00
+                  </li>
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>
                     You will be redirected to Paystack's secure payment page

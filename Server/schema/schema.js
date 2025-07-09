@@ -19,7 +19,11 @@ const userSchema = new Schema({
     ], 
     default: 'user' 
   },
-  apiKey: { type: String, unique: true },
+  apiKey: { 
+    type: String, 
+    unique: true,
+    sparse: true  // This allows multiple null values
+  },
   wallet: {
     balance: { type: Number, default: 0 },
     currency: { type: String, default: 'GHS' },
@@ -106,22 +110,58 @@ userSchema.methods.updatePermissions = function() {
   }
 };
 
-// Pre-save middleware to update permissions
+// Pre-save middleware to update permissions and generate API key
 userSchema.pre('save', function(next) {
+  // Generate API key for new users if they need one (agents and admins)
+  if (this.isNew && !this.apiKey && ['agent', 'admin', 'wallet_admin'].includes(this.role)) {
+    this.generateApiKey();
+  }
+  
   if (this.isModified('role')) {
     this.updatePermissions();
     this.adminMetadata.roleChangedAt = new Date();
+    
+    // Generate API key if role changed to one that needs it
+    if (['agent', 'admin', 'wallet_admin'].includes(this.role) && !this.apiKey) {
+      this.generateApiKey();
+    }
   }
   
   this.updatedAt = new Date();
   next();
 });
 
-// API Key generation method
-userSchema.methods.generateApiKey = function() {
-  const apiKey = require('crypto').randomBytes(32).toString('hex');
+// API Key generation method with uniqueness check
+userSchema.methods.generateApiKey = async function() {
+  const crypto = require('crypto');
+  let apiKey;
+  let isUnique = false;
+  
+  // Keep generating until we find a unique key
+  while (!isUnique) {
+    apiKey = crypto.randomBytes(32).toString('hex');
+    
+    // Check if this key already exists
+    const existing = await this.constructor.findOne({ apiKey });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+  
   this.apiKey = apiKey;
   return apiKey;
+};
+
+// Method to regenerate API key
+userSchema.methods.regenerateApiKey = async function() {
+  const oldKey = this.apiKey;
+  await this.generateApiKey();
+  await this.save();
+  
+  // Log the API key change for audit purposes
+  console.log(`API Key regenerated for user ${this.username}. Old key: ${oldKey?.substring(0, 8)}...`);
+  
+  return this.apiKey;
 };
 
 // Method to check if user has specific permission
@@ -198,7 +238,7 @@ const orderSchema = new Schema({
   capacity: { type: Number, required: true }, // Data capacity in MB
   price: { type: Number, required: true },
   recipientNumber: { type: String, required: true },
-  orderReference: { type: String, unique: true },
+  orderReference: { type: String, unique: true, sparse: true },
   
   // API-specific fields for external integrations
   apiReference: { type: String }, // To store the API reference number
@@ -219,7 +259,7 @@ const orderSchema = new Schema({
   
   // Enhanced editor tracking information
   editorInfo: {
-    editorId: { type: Schema.Types.ObjectId, ref: 'IgetUser' },
+    editorId: { type: Schema.Types.ObjectId, ref: 'KeymediaUser' },
     editorUsername: String,
     editorRole: String,
     previousStatus: String,
@@ -254,7 +294,7 @@ orderSchema.pre('save', function(next) {
     } else {
       // Create different prefixes for different bundle types
       const prefix = this.bundleType === 'AfA-registration' ? 'AFA-' : 'ORD-';
-      this.orderReference = prefix + Math.floor(1000 + Math.random() * 900000);
+      this.orderReference = prefix + Date.now() + Math.floor(Math.random() * 1000);
     }
   }
   
@@ -291,10 +331,10 @@ const transactionSchema = new Schema({
     enum: ['pending', 'completed', 'failed','api_error','reward'],
     default: 'pending'
   },
-  reference: { type: String, unique: true },
+  reference: { type: String, unique: true, sparse: true },
   orderId: {
     type: Schema.Types.ObjectId,
-    ref: 'IgetOrder'
+    ref: 'KeymediaOrder'
   },
   balanceBefore: { type: Number },
   balanceAfter: { type: Number },
@@ -303,7 +343,7 @@ const transactionSchema = new Schema({
     ref: 'KeymediaUser'
   },
   processedByInfo: {
-    adminId: { type: Schema.Types.ObjectId },
+    adminId: { type: Schema.Types.ObjectId, ref: 'KeymediaUser' },
     username: String,
     email: String,
     role: { 
@@ -324,7 +364,7 @@ const transactionSchema = new Schema({
   // Enhanced metadata for better admin tracking
   metadata: {
     adminAction: String,
-    performedBy: { type: Schema.Types.ObjectId },
+    performedBy: { type: Schema.Types.ObjectId, ref: 'KeymediaUser' },
     performedByRole: String,
     performedAt: { type: Date },
     clientIp: String,
@@ -340,6 +380,16 @@ const transactionSchema = new Schema({
   
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
+});
+
+// Generate unique transaction reference
+transactionSchema.pre('save', function(next) {
+  if (!this.reference) {
+    this.reference = 'TXN-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+  }
+  
+  this.updatedAt = new Date();
+  next();
 });
 
 // API Request Log Schema for comprehensive tracking
@@ -387,18 +437,39 @@ const settingsSchema = new Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Create models
-const UserModel = mongoose.model('KeymediaUser', userSchema);
-const BundleModel = mongoose.model('KeymediaBundle', bundleSchema);
-const OrderModel = mongoose.model('KeymediaOrder', orderSchema);
-const TransactionModel = mongoose.model('KeymediaTransaction', transactionSchema);
+// Create indexes
+userSchema.index({ email: 1 });
+userSchema.index({ username: 1 });
+userSchema.index({ role: 1 });
+userSchema.index({ 'wallet.balance': 1 });
 
-// Then export with the names your routes expect
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ status: 1 });
+orderSchema.index({ bundleType: 1 });
+orderSchema.index({ recipientNumber: 1 });
+
+transactionSchema.index({ user: 1, createdAt: -1 });
+transactionSchema.index({ status: 1 });
+transactionSchema.index({ type: 1 });
+
+apiLogSchema.index({ createdAt: -1 });
+apiLogSchema.index({ user: 1 });
+apiLogSchema.index({ endpoint: 1 });
+
+// Create models
+const User = mongoose.model('KeymediaUser', userSchema);
+const Bundle = mongoose.model('KeymediaBundle', bundleSchema);
+const Order = mongoose.model('KeymediaOrder', orderSchema);
+const Transaction = mongoose.model('KeymediaTransaction', transactionSchema);
+const ApiLog = mongoose.model('KeymediaApiLog', apiLogSchema);
+const Settings = mongoose.model('KeymediaSettings', settingsSchema);
+
+// Export models
 module.exports = {
-  User: UserModel,
-  Bundle: BundleModel,
-  Order: OrderModel,
-  Transaction: TransactionModel,
- 
+  User,
+  Bundle,
+  Order,
+  Transaction,
+  ApiLog,
+  Settings
 };
-  

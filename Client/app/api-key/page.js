@@ -14,7 +14,7 @@ const ApiKeyManager = () => {
   const fetchApiKey = async () => {
     try {
       setApiKeyData(prev => ({ ...prev, loading: true }));
-      const response = await axios.get('http://localhost:5000/api/v1/api-key', {
+      const response = await axios.get('https://keymedia-consult.onrender.com/api/v1/api-key', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -39,7 +39,7 @@ const ApiKeyManager = () => {
   const generateApiKey = async () => {
     try {
       setActionLoading(true);
-      const response = await axios.post('http://localhost5000/api/v1/generate-api-key', {}, {
+      const response = await axios.post('https://keymedia-consult.onrender.com/api/v1/generate-api-key', {}, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('igettoken')}`
         }
@@ -64,7 +64,7 @@ const ApiKeyManager = () => {
   const revokeApiKey = async () => {
     try {
       setActionLoading(true);
-      await axios.delete('http://localhost:5000/api/v1/api-key', {
+      await axios.delete('https://keymedia-consult.onrender.com/api/v1/api-key', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('igettoken')}`
         }

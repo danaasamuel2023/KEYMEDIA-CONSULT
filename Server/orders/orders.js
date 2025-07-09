@@ -1,4 +1,4 @@
-// routes/orders.js - Updated with working SMS implementation
+// routes/orders.js - Complete updated file with DataWorks API integration
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();
@@ -17,6 +17,12 @@ const SMS_CONFIG = {
   API_KEY: process.env.MNOTIFY_API_KEY || 'iIXE2cLk0MPy5cZ9gwRhtdj7F', // Working API key
   SENDER_ID: process.env.MNOTIFY_SENDER_ID || 'KeyMediaCon', // Working sender ID
   BASE_URL: 'https://apps.mnotify.net/smsapi'
+};
+
+// DataWorks API configuration
+const DATAWORKS_CONFIG = {
+  API_URL: 'https://api.dataworksgh.com/api/abusua.php',
+  SUPER_AGENT_EMAIL: process.env.DATAWORKS_AGENT_EMAIL || 'keymediaconsult34@gmail.com' // Set this in your .env file
 };
 
 // Middleware for Editor-only actions
@@ -108,6 +114,76 @@ const formatPhoneNumberForMnotify = (phone) => {
   }
   
   return cleaned;
+};
+
+/**
+ * Call DataWorks API for MTN UP2U orders
+ * @param {string} recipientNumber - Recipient phone number
+ * @param {number} gig - Data size in GB
+ * @param {string} referenceId - Unique reference ID
+ * @returns {Promise<Object>} - API response
+ */
+const callDataWorksAPI = async (recipientNumber, gig, referenceId) => {
+  try {
+    // Ensure recipient number is exactly 10 digits
+    const formattedRecipient = recipientNumber.replace(/\D/g, '');
+    if (formattedRecipient.length !== 10) {
+      throw new Error('Recipient number must be exactly 10 digits');
+    }
+
+    const data = {
+      super_agent_email: DATAWORKS_CONFIG.SUPER_AGENT_EMAIL,
+      recipient_number: formattedRecipient,
+      network: 'MTN',
+      gig: gig,
+      reference_id: referenceId
+    };
+
+    console.log('📡 Calling DataWorks API with data:', {
+      ...data,
+      super_agent_email: '***' // Hide email in logs
+    });
+
+    const response = await axios.post(DATAWORKS_CONFIG.API_URL, data, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000 // 30 second timeout
+    });
+
+    console.log('DataWorks API Response:', response.data);
+
+    // Check for successful response
+    if (response.status === 200 || (response.data && response.data.status === 200)) {
+      return {
+        success: true,
+        message: response.data.message || 'Successful',
+        data: response.data
+      };
+    } else {
+      return {
+        success: false,
+        message: response.data.message || 'API call failed',
+        data: response.data
+      };
+    }
+
+  } catch (error) {
+    console.error('DataWorks API Error:', error.message);
+    if (error.response) {
+      console.error('API Error Response:', error.response.data);
+      return {
+        success: false,
+        message: `API Error: ${error.response.status} - ${error.response.statusText}`,
+        error: error.response.data
+      };
+    }
+    return {
+      success: false,
+      message: error.message,
+      error: error
+    };
+  }
 };
 
 /**
@@ -277,7 +353,7 @@ const sendSMS = async (to, message, options = {}) => {
   }
 };
 
-// POST place order (user endpoint)
+// POST place order (user endpoint) - LEGACY endpoint without API integration
 router.post('/placeord', auth, validateModelsAndDb, async (req, res) => {
   try {
     const { recipientNumber, capacity, price, bundleType } = req.body;
@@ -636,12 +712,12 @@ router.get('/user/:userId', adminAuth, validateModelsAndDb, async (req, res) => 
 
 /**
  * @route   PUT /api/orders/:id/status
- * @desc    Update order status (EDITOR ROLE ONLY) - FIXED SMS
+ * @desc    Update order status (EDITOR ROLE ONLY) - WITH API RETRY FOR MTN UP2U
  * @access  Editor/Admin
  */
 router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (req, res) => {
   try {
-    const { status, senderID = 'DataMartGH', sendSMSNotification = true, failureReason } = req.body;
+    const { status, senderID = 'DataMartGH', sendSMSNotification = true, failureReason, retryAPI = false } = req.body;
     
     if (!status) {
       return res.status(400).json({
@@ -677,6 +753,38 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
         success: false,
         message: `Order is already in ${status} status`
       });
+    }
+    
+    // If Editor is marking as completed AND it's mtnup2u AND retryAPI is true, try API again
+    if (status === 'completed' && order.bundleType.toLowerCase() === 'mtnup2u' && retryAPI) {
+      console.log('🔄 Editor requested API retry for MTN UP2U order...');
+      
+      const gigValue = order.capacity >= 1000 ? order.capacity / 1000 : order.capacity;
+      const apiCallResult = await callDataWorksAPI(
+        order.recipientNumber,
+        gigValue,
+        order.orderReference
+      );
+      
+      if (!apiCallResult.success) {
+        return res.status(400).json({
+          success: false,
+          message: `API retry failed: ${apiCallResult.message}`,
+          apiError: apiCallResult.error
+        });
+      }
+      
+      // API retry successful, continue with status update
+      order.apiReference = order.orderReference;
+      order.metadata = {
+        ...order.metadata,
+        apiRetryResponse: {
+          success: true,
+          message: apiCallResult.message,
+          timestamp: new Date(),
+          retriedBy: req.user.username
+        }
+      };
     }
     
     // Process refund if status is being changed to refunded
@@ -718,7 +826,8 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
       statusChangedAt: new Date(),
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      failureReason: failureReason || null
+      failureReason: failureReason || null,
+      apiRetryAttempted: retryAPI || false
     };
     
     // Set completed date if status is now completed
@@ -748,15 +857,15 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
             
             switch(order.bundleType?.toLowerCase()) {
               case 'mtnup2u':
-                const dataAmount = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
+                const dataAmount = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}MB`;
                 completionMessage = `${dataAmount} has been credited to ${order.recipientNumber} and is valid for 3 months.\nDataMartGH`;
                 break;
               case 'telecel-5959':
-                const dataSizeGB = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
+                const dataSizeGB = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}MB`;
                 completionMessage = `${dataSizeGB} has been allocated to ${order.recipientNumber} and is valid for 2 months.\nDataMartGH`;
                 break;
               default:
-                const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
+                const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}MB`;
                 completionMessage = `${dataSize} has been sent to ${order.recipientNumber}.\nDataMartGH`;
                 break;
             }
@@ -779,7 +888,7 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
             if (order.bundleType && order.bundleType.toLowerCase() === 'afa-registration') {
               refundMessage = `Your AFA registration has been cancelled. The amount has been reversed to your DataMartGH balance. Kindly check your balance to confirm.\nDataMartGH`;
             } else {
-              const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}GB`;
+              const dataSize = order.capacity >= 1000 ? `${order.capacity/1000}GB` : `${order.capacity}MB`;
               refundMessage = `Your ${dataSize} order to ${order.recipientNumber} failed. The amount has been reversed to your DataMartGH balance. Kindly check your balance to confirm.\nDataMartGH`;
             }
             
@@ -820,7 +929,8 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
         from: previousStatus,
         to: status,
         changedAt: new Date(),
-        reason: failureReason || null
+        reason: failureReason || null,
+        apiRetryAttempted: retryAPI || false
       },
       smsNotification: sendSMSNotification ? {
         attempted: true,
@@ -945,7 +1055,7 @@ router.get('/trends/weekly', adminAuth, validateModelsAndDb, async (req, res) =>
   }
 });
 
-// POST place order (main endpoint - NO API INTEGRATION, PENDING ONLY)
+// POST place order (main endpoint - WITH DATAWORKS API INTEGRATION FOR MTN UP2U)
 router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
   try {
     const { recipientNumber, capacity, price, bundleType } = req.body;
@@ -981,24 +1091,74 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
     
     try {
       // Generate order reference
-      const orderReference = Math.floor(1000 + Math.random() * 900000);
+      const orderReference = Math.floor(1000 + Math.random() * 900000).toString();
       
-      // Create new order - ALWAYS SET TO PENDING (NO API CALLS)
+      // Determine initial status and whether to call API
+      let initialStatus = 'pending';
+      let apiCallResult = null;
+      let apiReference = null;
+      
+      // Only call DataWorks API if bundle type is mtnup2u
+      if (bundleType.toLowerCase() === 'mtnup2u') {
+        console.log('🔄 Processing MTN UP2U order - calling DataWorks API...');
+        
+        // Convert capacity from MB to GB for the API
+        const gigValue = capacity >= 1000 ? capacity / 1000 : capacity;
+        
+        // Call DataWorks API
+        apiCallResult = await callDataWorksAPI(
+          recipientNumber,
+          gigValue,
+          orderReference
+        );
+        
+        if (apiCallResult.success) {
+          console.log('✅ DataWorks API call successful');
+          initialStatus = 'completed'; // Set to completed if API call succeeds
+          apiReference = orderReference; // Store the reference used with the API
+        } else {
+          console.log('❌ DataWorks API call failed:', apiCallResult.message);
+          // Keep status as pending so Editor can retry manually
+          initialStatus = 'pending';
+        }
+      }
+      
+      // Create new order
       const newOrder = new Order({
         user: req.user.id,
         bundleType: bundleType,
         capacity: capacity,
         price: price,
         recipientNumber: recipientNumber,
-        status: 'pending', // Always pending - no API integration
-        orderReference: orderReference.toString(),
+        status: initialStatus,
+        orderReference: orderReference,
         updatedAt: Date.now(),
-        // Clear any API references since we're not using APIs
-        apiReference: null,
-        hubnetReference: null
+        apiReference: apiReference,
+        // Store API response for debugging
+        metadata: {
+          ...(apiCallResult && {
+            apiResponse: {
+              success: apiCallResult.success,
+              message: apiCallResult.message,
+              timestamp: new Date()
+            }
+          })
+        }
       });
       
-      console.log(`Order created for bundle type ${bundleType} - set to pending for Editor processing (NO API CALLS).`);
+      // If API call was successful for mtnup2u, mark as auto-completed
+      if (bundleType.toLowerCase() === 'mtnup2u' && apiCallResult?.success) {
+        newOrder.completedAt = new Date();
+        newOrder.processedBy = null; // System processed, not Editor
+        newOrder.editorInfo = {
+          previousStatus: 'pending',
+          newStatus: 'completed',
+          statusChangedAt: new Date(),
+          note: 'Auto-completed via DataWorks API'
+        };
+      }
+      
+      console.log(`Order created for bundle type ${bundleType} - status: ${initialStatus}`);
       
       // Save the order
       await newOrder.save({ session });
@@ -1031,10 +1191,28 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
       
       console.log(`Order ${orderReference} placed successfully. User balance updated: ${user.wallet.balance}`);
       
+      // Send SMS if order was auto-completed
+      if (initialStatus === 'completed' && user.phone) {
+        try {
+          const userPhone = formatPhoneNumberForMnotify(user.phone);
+          const dataAmount = capacity >= 1000 ? `${capacity/1000}GB` : `${capacity}MB`;
+          const completionMessage = `${dataAmount} has been credited to ${recipientNumber} and is valid for 3 months.\nDataMartGH`;
+          
+          await sendSMS(userPhone, completionMessage, {
+            useCase: 'transactional',
+            senderID: 'DataMartGH'
+          });
+        } catch (smsError) {
+          console.error('Failed to send completion SMS:', smsError.message);
+        }
+      }
+      
       // Return the created order
       res.status(201).json({
         success: true,
-        message: 'Order placed successfully and awaiting Editor approval',
+        message: initialStatus === 'completed' 
+          ? 'Order completed successfully!' 
+          : 'Order placed successfully and awaiting Editor approval',
         data: {
           order: {
             id: newOrder._id,
@@ -1053,10 +1231,16 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
             status: transaction.status
           },
           walletBalance: user.wallet.balance,
-          note: 'Your order is pending and will be processed by our Editors. Payment has been deducted from your wallet.',
+          note: initialStatus === 'completed'
+            ? 'Your MTN data bundle has been sent successfully!'
+            : apiCallResult && !apiCallResult.success
+              ? `Order pending due to API error: ${apiCallResult.message}. Our Editors will process it manually.`
+              : 'Your order is pending and will be processed by our Editors.',
           apiIntegration: {
-            enabled: false,
-            note: 'All orders are processed manually by Editors - no automatic API calls'
+            enabled: bundleType.toLowerCase() === 'mtnup2u',
+            attempted: !!apiCallResult,
+            success: apiCallResult?.success || false,
+            message: apiCallResult?.message || null
           }
         }
       });
@@ -1165,7 +1349,7 @@ router.get('/today/admin', adminAuth, validateModelsAndDb, async (req, res) => {
   }
 });
 
-// Bulk purchase endpoint
+// Bulk purchase endpoint with DataWorks API support
 router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
   // Start a mongoose session for transaction
   const session = await mongoose.startSession();
@@ -1209,7 +1393,11 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
     // Create a bulk transaction reference
     const bulkTransactionReference = new mongoose.Types.ObjectId().toString();
     
-    // Process each order with Editor approval requirement
+    // Check if this is an MTN UP2U bulk order
+    const isMtnBulk = networkKey.toLowerCase() === 'mtnup2u' || 
+                      (orders.length > 0 && orders[0].bundleType?.toLowerCase() === 'mtnup2u');
+    
+    // Process each order with API integration for MTN UP2U
     for (const orderData of orders) {
       try {
         // Generate a reference number
@@ -1217,22 +1405,59 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
         const numbers = Math.floor(100000 + Math.random() * 900000).toString();
         const reference = `${prefix}${numbers}`;
         
-        // Create order set to pending for Editor approval
+        // Determine if we should call DataWorks API
+        let orderStatus = 'pending';
+        let apiCallResult = null;
+        
+        if (isMtnBulk) {
+          console.log('🔄 Processing MTN UP2U bulk order item...');
+          const gigValue = orderData.capacity >= 1000 ? orderData.capacity / 1000 : orderData.capacity;
+          
+          apiCallResult = await callDataWorksAPI(
+            orderData.recipient,
+            gigValue,
+            reference
+          );
+          
+          if (apiCallResult.success) {
+            orderStatus = 'completed';
+          }
+        }
+        
+        // Create order
         const order = new Order({
           user: user._id,
-          bundleType: orderData.bundleType || 'bulk',
+          bundleType: orderData.bundleType || networkKey || 'bulk',
           capacity: parseFloat(orderData.capacity),
           price: orderData.price,
           recipientNumber: orderData.recipient,
-          status: 'pending', // All bulk orders need Editor approval
+          status: orderStatus,
           orderReference: reference,
+          apiReference: apiCallResult?.success ? reference : null,
           metadata: {
             userBalance: user.wallet.balance,
             orderTime: new Date(),
             isBulkOrder: true,
-            bulkTransactionReference
+            bulkTransactionReference,
+            ...(apiCallResult && {
+              apiResponse: {
+                success: apiCallResult.success,
+                message: apiCallResult.message,
+                timestamp: new Date()
+              }
+            })
           }
         });
+        
+        if (orderStatus === 'completed') {
+          order.completedAt = new Date();
+          order.editorInfo = {
+            previousStatus: 'pending',
+            newStatus: 'completed',
+            statusChangedAt: new Date(),
+            note: 'Auto-completed via DataWorks API (bulk order)'
+          };
+        }
 
         await order.save({ session });
         
@@ -1244,9 +1469,13 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
           recipient: orderData.recipient,
           capacity: orderData.capacity,
           price: orderData.price,
-          status: 'pending',
+          status: orderStatus,
           reference: reference,
-          note: 'Awaiting Editor approval'
+          note: orderStatus === 'completed' 
+            ? 'Completed successfully via API' 
+            : apiCallResult && !apiCallResult.success
+              ? `Pending - API error: ${apiCallResult.message}`
+              : 'Awaiting Editor approval'
         });
         
       } catch (orderError) {
@@ -1286,6 +1515,24 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
       user.wallet.balance -= results.totalAmount;
       user.wallet.transactions.push(transaction._id);
       await user.save({ session });
+      
+      // Send bulk SMS notification if MTN orders were auto-completed
+      if (isMtnBulk && user.phone) {
+        const completedCount = results.orders.filter(o => o.status === 'completed').length;
+        if (completedCount > 0) {
+          try {
+            const userPhone = formatPhoneNumberForMnotify(user.phone);
+            const message = `Bulk order processed: ${completedCount} MTN data bundles sent successfully. Check your order history for details.\nDataMartGH`;
+            
+            await sendSMS(userPhone, message, {
+              useCase: 'transactional',
+              senderID: 'DataMartGH'
+            });
+          } catch (smsError) {
+            console.error('Failed to send bulk completion SMS:', smsError.message);
+          }
+        }
+      }
     }
     
     // Commit the transaction
@@ -1294,7 +1541,7 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
     // Return results
     res.status(200).json({
       success: true,
-      message: `Bulk purchase processed: ${results.successful} orders created and awaiting Editor approval, ${results.failed} failed`,
+      message: `Bulk purchase processed: ${results.successful} orders created, ${results.failed} failed`,
       data: {
         totalOrders: orders.length,
         successful: results.successful,
@@ -1302,7 +1549,13 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
         totalAmount: results.totalAmount,
         newBalance: user.wallet.balance,
         orders: results.orders,
-        note: 'All orders are pending and require Editor approval before processing'
+        note: isMtnBulk 
+          ? 'MTN orders are processed automatically via API. Failed orders require Editor approval.'
+          : 'All orders are pending and require Editor approval before processing',
+        apiIntegration: {
+          enabled: isMtnBulk,
+          provider: 'DataWorks'
+        }
       }
     });
     

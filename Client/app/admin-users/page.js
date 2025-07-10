@@ -533,6 +533,7 @@ export default function UsersManagement() {
       case 'admin': return 'Admin';
       case 'agent': return 'Agent';
       case 'user': return 'User';
+      case 'super_agent': return 'Super Agent';
       default: return role || 'user';
     }
   };

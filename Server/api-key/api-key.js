@@ -37,7 +37,7 @@ router.post('/generate-api-key', authMiddleware, async (req, res) => {
     }
     
     // Check if user's role is allowed to have an API key
-    const allowedRoles = ['admin', 'agent', 'wallet_admin'];
+    const allowedRoles = ['admin', 'agent', 'wallet_admin','super_agent'];
     if (!allowedRoles.includes(user.role)) {
       return res.status(403).json({ 
         success: false, 

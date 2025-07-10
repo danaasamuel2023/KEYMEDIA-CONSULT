@@ -13,7 +13,8 @@ const userSchema = new Schema({
     enum: [
       'admin',        // Full admin - can do everything
       'user',         // Regular user
-      'agent',        // Agent role
+      'agent',
+      'super_agent',        // Agent role
       'Editor',       // Editor role - can update order statuses
       'wallet_admin'  // Unified wallet admin - can both credit and debit user wallets
     ], 

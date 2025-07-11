@@ -1,14 +1,91 @@
-// routes/api.js - Updated to store orders as pending without external API calls
+// routes/api.js - Updated with DataWorks API integration for MTN UP2U orders
 const express = require('express');
 const router = express.Router();
+const axios = require('axios'); // Add axios import
 const { Order, User, Transaction, Bundle } = require('../schema/schema');
 const apiAuth = require('../middlewareApi/ApiAuth');
 const { ApiLog } = require('../schema/schema');
 const mongoose = require('mongoose');
 
+// DataWorks API configuration
+const DATAWORKS_CONFIG = {
+  API_URL: 'https://api.dataworksgh.com/api/abusua.php',
+  SUPER_AGENT_EMAIL: process.env.DATAWORKS_AGENT_EMAIL || 'keymediaconsult34@gmail.com'
+};
+
+/**
+ * Call DataWorks API for MTN UP2U orders
+ * @param {string} recipientNumber - Recipient phone number
+ * @param {number} gig - Data size in GB
+ * @param {string} referenceId - Unique reference ID
+ * @returns {Promise<Object>} - API response
+ */
+const callDataWorksAPI = async (recipientNumber, gig, referenceId) => {
+  try {
+    // Ensure recipient number is exactly 10 digits
+    const formattedRecipient = recipientNumber.replace(/\D/g, '');
+    if (formattedRecipient.length !== 10) {
+      throw new Error('Recipient number must be exactly 10 digits');
+    }
+
+    const data = {
+      super_agent_email: DATAWORKS_CONFIG.SUPER_AGENT_EMAIL,
+      recipient_number: formattedRecipient,
+      network: 'MTN',
+      gig: gig,
+      reference_id: referenceId
+    };
+
+    console.log('📡 Calling DataWorks API with data:', {
+      ...data,
+      super_agent_email: '***' // Hide email in logs
+    });
+
+    const response = await axios.post(DATAWORKS_CONFIG.API_URL, data, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000 // 30 second timeout
+    });
+
+    console.log('DataWorks API Response:', response.data);
+
+    // Check for successful response
+    if (response.status === 200 || (response.data && response.data.status === 200)) {
+      return {
+        success: true,
+        message: response.data.message || 'Successful',
+        data: response.data
+      };
+    } else {
+      return {
+        success: false,
+        message: response.data.message || 'API call failed',
+        data: response.data
+      };
+    }
+
+  } catch (error) {
+    console.error('DataWorks API Error:', error.message);
+    if (error.response) {
+      console.error('API Error Response:', error.response.data);
+      return {
+        success: false,
+        message: `API Error: ${error.response.status} - ${error.response.statusText}`,
+        error: error.response.data
+      };
+    }
+    return {
+      success: false,
+      message: error.message,
+      error: error
+    };
+  }
+};
+
 /**
  * @route   POST /api/v1/orders/place
- * @desc    Place an order using API key auth - No external API integration
+ * @desc    Place an order using API key auth - WITH DataWorks API integration for MTN UP2U
  * @access  Private (API Key)
  */
 router.post('/orders/place', apiAuth, async (req, res) => {
@@ -63,31 +140,77 @@ router.post('/orders/place', apiAuth, async (req, res) => {
     
     try {
       // Generate unique order reference
-      const orderReference = Math.floor(100000 + Math.random() * 900000);
+      const orderReference = Math.floor(100000 + Math.random() * 900000).toString();
       
-      // Create new order - ALWAYS PENDING (NO EXTERNAL API CALLS)
+      // Determine initial status and whether to call API
+      let initialStatus = 'pending';
+      let apiCallResult = null;
+      let apiReference = null;
+      
+      // Only call DataWorks API if bundle type is mtnup2u
+      if (bundleType.toLowerCase() === 'mtnup2u') {
+        console.log('🔄 Processing MTN UP2U order via API - calling DataWorks API...');
+        
+        // Convert capacity from MB to GB for the API
+        const gigValue = capacity >= 1000 ? capacity / 1000 : capacity;
+        
+        // Call DataWorks API
+        apiCallResult = await callDataWorksAPI(
+          recipientNumber,
+          gigValue,
+          orderReference
+        );
+        
+        if (apiCallResult.success) {
+          console.log('✅ DataWorks API call successful');
+          initialStatus = 'completed'; // Set to completed if API call succeeds
+          apiReference = orderReference; // Store the reference used with the API
+        } else {
+          console.log('❌ DataWorks API call failed:', apiCallResult.message);
+          // Keep status as pending so Editor can retry manually
+          initialStatus = 'pending';
+        }
+      }
+      
+      // Create new order
       const newOrder = new Order({
         user: req.user.id,
         bundleType: bundleType,
         capacity: capacity,
         price: price,
         recipientNumber: recipientNumber,
-        status: 'pending', // Always pending - no external API integration
-        orderReference: orderReference.toString(),
+        status: initialStatus,
+        orderReference: orderReference,
         updatedAt: Date.now(),
-        // Clear all API-related fields since we don't use external APIs
-        apiReference: null,
-        hubnetReference: null,
-        // Add metadata to track API source
+        apiReference: apiReference,
+        // Add metadata to track API source and response
         metadata: {
           source: 'api',
           apiVersion: 'v1',
           orderPlacedAt: new Date(),
-          noExternalApiCall: true
+          ...(apiCallResult && {
+            apiResponse: {
+              success: apiCallResult.success,
+              message: apiCallResult.message,
+              timestamp: new Date()
+            }
+          })
         }
       });
       
-      console.log(`API Order ${orderReference} for bundle type ${bundleType} - set to pending for manual processing (NO EXTERNAL API CALLS)`);
+      // If API call was successful for mtnup2u, mark as auto-completed
+      if (bundleType.toLowerCase() === 'mtnup2u' && apiCallResult?.success) {
+        newOrder.completedAt = new Date();
+        newOrder.processedBy = null; // System processed, not Editor
+        newOrder.editorInfo = {
+          previousStatus: 'pending',
+          newStatus: 'completed',
+          statusChangedAt: new Date(),
+          note: 'Auto-completed via DataWorks API'
+        };
+      }
+      
+      console.log(`API Order ${orderReference} for bundle type ${bundleType} - status: ${initialStatus}`);
       
       await newOrder.save({ session });
       
@@ -122,7 +245,9 @@ router.post('/orders/place', apiAuth, async (req, res) => {
       // Return the created order
       res.status(201).json({
         success: true,
-        message: 'Order placed successfully via API and set for manual processing',
+        message: initialStatus === 'completed' 
+          ? 'Order completed successfully via API!' 
+          : 'Order placed successfully via API and set for manual processing',
         data: {
           order: {
             id: newOrder._id,
@@ -142,9 +267,19 @@ router.post('/orders/place', apiAuth, async (req, res) => {
           },
           walletBalance: user.wallet.balance,
           processing: {
-            method: 'manual',
-            note: 'Order will be processed manually by system administrators',
-            externalApiUsed: false
+            method: initialStatus === 'completed' ? 'automatic' : 'manual',
+            note: initialStatus === 'completed'
+              ? 'Your MTN data bundle has been sent successfully!'
+              : apiCallResult && !apiCallResult.success
+                ? `Order pending due to API error: ${apiCallResult.message}. Our Editors will process it manually.`
+                : 'Order will be processed manually by system administrators',
+            externalApiUsed: bundleType.toLowerCase() === 'mtnup2u',
+            apiIntegration: {
+              enabled: bundleType.toLowerCase() === 'mtnup2u',
+              attempted: !!apiCallResult,
+              success: apiCallResult?.success || false,
+              message: apiCallResult?.message || null
+            }
           }
         }
       });
@@ -216,7 +351,7 @@ router.get('/orders/reference/:orderRef', apiAuth, async (req, res) => {
           createdAt: order.createdAt,
           completedAt: order.completedAt,
           failureReason: order.failureReason,
-          processedManually: true // Indicate this is processed manually
+          processedManually: order.status === 'pending' || !order.apiReference
         },
         transaction: transaction ? {
           reference: transaction.reference,
@@ -224,9 +359,11 @@ router.get('/orders/reference/:orderRef', apiAuth, async (req, res) => {
           status: transaction.status
         } : null,
         processingInfo: {
-          method: 'manual',
-          externalApiUsed: false,
-          note: 'All orders are processed manually by system administrators'
+          method: order.status === 'completed' && order.apiReference ? 'automatic' : 'manual',
+          externalApiUsed: order.bundleType?.toLowerCase() === 'mtnup2u' && !!order.apiReference,
+          note: order.status === 'completed' && order.apiReference
+            ? 'Order was processed automatically via DataWorks API'
+            : 'Order requires manual processing by system administrators'
         }
       }
     });
@@ -319,8 +456,8 @@ router.get('/orders/my-orders', apiAuth, async (req, res) => {
           ordersPerPage: limit
         },
         processingInfo: {
-          method: 'manual',
-          note: 'All orders are processed manually - no external API integration'
+          method: 'automatic for MTN UP2U, manual for others',
+          note: 'MTN UP2U orders are processed automatically via DataWorks API. Other bundle types require manual processing.'
         }
       }
     });

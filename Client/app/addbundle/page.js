@@ -36,7 +36,8 @@ const BundleManagement = () => {
     { id: 'user', label: 'User' },
     { id: 'admin', label: 'Admin' },
     { id: 'agent', label: 'Agent' },
-    { id: 'Editor', label: 'Editor' }
+    { id: 'Editor', label: 'Editor' }, 
+  { id: 'super_agent', label: 'Super Agent' } // Added Super Agent role
   ];
 
   // Fetch bundles by type

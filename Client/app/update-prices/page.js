@@ -146,7 +146,8 @@ const BundlePriceList = () => {
         admin: parseFloat(editPrices.admin),
         user: parseFloat(editPrices.user),
         agent: parseFloat(editPrices.agent),
-        Editor: parseFloat(editPrices.Editor)
+        Editor: parseFloat(editPrices.Editor),
+        super_agent: parseFloat(editPrices.super_agent) || parseFloat(editPrices.standard) // Default to standard if not set  
       };
       
       await axios.put(`https://keymedia-consult.onrender.com/api/iget/${bundleId}`, {

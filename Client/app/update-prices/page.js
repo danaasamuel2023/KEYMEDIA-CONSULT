@@ -17,7 +17,8 @@ const BundlePriceList = () => {
     admin: '',
     user: '',
     agent: '',
-    Editor: ''
+    Editor: '',
+    super_agent: '' // Added super_agent to the state
   });
   const [updateLoading, setUpdateLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -99,13 +100,14 @@ const BundlePriceList = () => {
   const startEditing = (bundle) => {
     setEditingBundle(bundle._id);
     
-    // Initialize with current values
+    // Initialize with current values, including super_agent
     setEditPrices({
       standard: bundle.price.toString(),
       admin: bundle.rolePricing?.admin?.toString() || bundle.price.toString(),
       user: bundle.rolePricing?.user?.toString() || bundle.price.toString(),
       agent: bundle.rolePricing?.agent?.toString() || bundle.price.toString(),
-      Editor: bundle.rolePricing?.Editor?.toString() || bundle.price.toString()
+      Editor: bundle.rolePricing?.Editor?.toString() || bundle.price.toString(),
+      super_agent: bundle.rolePricing?.super_agent?.toString() || bundle.price.toString() // Added super_agent initialization
     });
   };
   
@@ -116,7 +118,8 @@ const BundlePriceList = () => {
       admin: '',
       user: '',
       agent: '',
-      Editor: ''
+      Editor: '',
+      super_agent: '' // Reset super_agent
     });
   };
   
@@ -141,13 +144,13 @@ const BundlePriceList = () => {
     try {
       const token = localStorage.getItem('igettoken');
       
-      // Format role pricing data for API
+      // Format role pricing data for API - including super_agent
       const rolePricing = {
         admin: parseFloat(editPrices.admin),
         user: parseFloat(editPrices.user),
         agent: parseFloat(editPrices.agent),
         Editor: parseFloat(editPrices.Editor),
-        super_agent: parseFloat(editPrices.super_agent) || parseFloat(editPrices.standard) // Default to standard if not set  
+        super_agent: parseFloat(editPrices.super_agent) // Now properly using the edited value
       };
       
       await axios.put(`https://keymedia-consult.onrender.com/api/iget/${bundleId}`, {

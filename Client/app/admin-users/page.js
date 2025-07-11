@@ -534,8 +534,8 @@ export default function UsersManagement() {
       case 'Editor': return 'Editor';
       case 'admin': return 'Admin';
       case 'agent': return 'Agent';
-      case 'user': return 'User';
       case 'super_agent': return 'Super Agent';
+      case 'user': return 'User';
       default: return role || 'user';
     }
   };
@@ -1016,6 +1016,7 @@ export default function UsersManagement() {
                               >
                                 <option value="user">User</option>
                                 <option value="agent">Agent</option>
+                                <option value="super_agent">Super Agent</option>
                                 <option value="Editor">Editor</option>
                                 <option value="wallet_admin">Wallet Admin</option>
                                 <option value="admin">Full Admin</option>
@@ -1026,6 +1027,7 @@ export default function UsersManagement() {
                               <ul className="mt-1 list-disc list-inside">
                                 <li><strong>User:</strong> Standard user access</li>
                                 <li><strong>Agent:</strong> Extended user features</li>
+                                <li><strong>Super Agent:</strong> Advanced agent features</li>
                                 <li><strong>Editor:</strong> Can update order statuses</li>
                                 <li><strong>Wallet Admin:</strong> Can credit and debit user wallets</li>
                                 <li><strong>Full Admin:</strong> Complete administrative access</li>
@@ -1182,7 +1184,7 @@ export default function UsersManagement() {
                         type="button"
                         className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:bg-gray-600 dark:text-white dark:border-gray-500 dark:hover:bg-gray-500"
                         onClick={handleCloseModal}
-                      >
+                        >
                         Cancel
                       </button>
                     </>

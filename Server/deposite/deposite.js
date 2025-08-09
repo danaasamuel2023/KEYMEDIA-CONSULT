@@ -1,4 +1,4 @@
-// paystackRoutes.js - Updated with paginated transactions route
+// paystackRoutes.js - Complete implementation with webhook
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -10,7 +10,7 @@ const authMiddleware = require('../AuthMiddle/middlewareauth');
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_live_c1439715d727b2b7561c47b1aa9200c45eadd772';
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
-// Transaction fee percentage (2%)
+// Transaction fee percentage (3%)
 const TRANSACTION_FEE_PERCENTAGE = 3;
 
 /**
@@ -45,7 +45,7 @@ const initiateDeposit = async (req, res) => {
       });
     }
 
-    // Calculate transaction fee (2% of the amount)
+    // Calculate transaction fee (3% of the amount)
     const feePercentage = TRANSACTION_FEE_PERCENTAGE / 100;
     const transactionFee = Math.round(amount * feePercentage);
     
@@ -159,59 +159,18 @@ const verifyTransaction = async (req, res) => {
       });
     }
 
-    // Get the metadata from Paystack response
-    const { userId, transactionId, originalAmount } = data.metadata;
+    // Process the successful payment
+    const result = await processSuccessfulPayment(reference);
 
-    // Find the transaction in our database
-    const transaction = await Transaction.findOne({
-      _id: transactionId,
-      reference: reference
-    });
-
-    if (!transaction) {
-      return res.status(404).json({
+    if (!result.success) {
+      return res.status(400).json({
         success: false,
-        message: 'Transaction not found'
+        message: result.message
       });
     }
 
-    // If the transaction is already completed, prevent double processing
-    if (transaction.status === 'completed') {
-      return res.status(200).json({
-        success: true,
-        message: 'Transaction already processed',
-        data: transaction
-      });
-    }
-
-    // Find the user
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Get the amount to credit to user's wallet (original amount without fee)
-    const creditAmount = originalAmount ? originalAmount / 100 : data.amount / 100;
-    
-    // Update transaction details
-    transaction.status = 'completed';
-    transaction.balanceBefore = user.wallet.balance;
-    transaction.balanceAfter = user.wallet.balance + creditAmount;
-    transaction.paymentDetails = {
-      ...transaction.paymentDetails,
-      paystack: data
-    };
-    transaction.updatedAt = Date.now();
-
-    // Update user wallet balance with only the original amount (not including fee)
-    user.wallet.balance += creditAmount;
-    user.wallet.transactions.push(transaction._id);
-
-    // Save both documents
-    await Promise.all([transaction.save(), user.save()]);
+    // Get updated transaction
+    const transaction = await Transaction.findOne({ reference });
 
     // Redirect or respond based on context
     if (req.headers['accept'] && req.headers['accept'].includes('text/html')) {
@@ -224,8 +183,8 @@ const verifyTransaction = async (req, res) => {
         message: 'Payment verified and wallet updated successfully',
         data: {
           transaction: transaction,
-          newBalance: user.wallet.balance,
-          amountCredited: creditAmount,
+          newBalance: transaction.balanceAfter,
+          amountCredited: transaction.amount,
         }
       });
     }
@@ -251,64 +210,39 @@ const handleWebhook = async (req, res) => {
       .digest('hex');
     
     if (hash !== req.headers['x-paystack-signature']) {
+      console.error('Invalid Paystack webhook signature');
       return res.status(401).json({ success: false, message: 'Invalid signature' });
     }
     
     const event = req.body;
+    console.log(`Received Paystack webhook event: ${event.event}`);
     
     // Handle charge.success event
     if (event.event === 'charge.success') {
       const { reference } = event.data;
       
-      // Find the corresponding transaction
-      const transaction = await Transaction.findOne({ reference });
-      if (!transaction) {
-        return res.status(200).send('Transaction not found, but webhook received');
+      // Process the successful payment
+      const result = await processSuccessfulPayment(reference);
+      
+      if (result.success) {
+        console.log(`Successfully processed payment via webhook for reference: ${reference}`);
+      } else {
+        console.error(`Failed to process payment via webhook for reference ${reference}: ${result.message}`);
       }
-      
-      // If transaction is already completed, do nothing
-      if (transaction.status === 'completed') {
-        return res.status(200).send('Transaction already processed');
-      }
-      
-      // Find the user
-      const user = await User.findById(transaction.user);
-      if (!user) {
-        return res.status(200).send('User not found, but webhook received');
-      }
-      
-      // Get the original amount (without fee) from metadata or use transaction amount
-      const originalAmount = event.data.metadata && event.data.metadata.originalAmount 
-        ? event.data.metadata.originalAmount / 100 
-        : transaction.amount;
-      
-      // Update transaction details
-      transaction.status = 'completed';
-      transaction.balanceBefore = user.wallet.balance;
-      transaction.balanceAfter = user.wallet.balance + originalAmount;
-      transaction.paymentDetails = {
-        ...transaction.paymentDetails,
-        paystack: event.data
-      };
-      transaction.updatedAt = Date.now();
-      
-      // Update user wallet balance with original amount (not including fee)
-      user.wallet.balance += originalAmount;
-      user.wallet.transactions.push(transaction._id);
-      
-      // Save both documents
-      await Promise.all([transaction.save(), user.save()]);
     }
     
     // Acknowledge receipt of the webhook
     return res.status(200).send('Webhook received');
   } catch (error) {
     console.error('Paystack webhook error:', error);
-    return res.status(500).send('Webhook processing failed');
+    // Still return 200 to prevent Paystack from retrying
+    return res.status(200).send('Webhook processing failed');
   }
 };
 
-// Adding the transaction locking mechanism from the second implementation
+/**
+ * Process successful payment with locking mechanism
+ */
 async function processSuccessfulPayment(reference) {
   // Use findOneAndUpdate with proper conditions to prevent race conditions
   const transaction = await Transaction.findOneAndUpdate(
@@ -357,8 +291,10 @@ async function processSuccessfulPayment(reference) {
     // Save both documents
     await Promise.all([transaction.save(), user.save()]);
     
+    console.log(`Payment processed successfully for reference: ${reference}`);
     return { success: true, message: 'Deposit successful' };
   } catch (error) {
+    console.error(`Error processing payment for reference ${reference}:`, error);
     // If there's an error, release the processing lock
     transaction.processing = false;
     await transaction.save();
@@ -392,7 +328,6 @@ const getUserTransactionsAndVerifyPending = async (req, res) => {
     const verifiedTransactions = [];
     
     // Get all pending transactions regardless of pagination for verification
-    // This ensures all pending transactions are verified even if they're not on the current page
     const pendingTransactions = await Transaction.find({ 
       user: userId, 
       status: 'pending', 
@@ -437,7 +372,6 @@ const getUserTransactionsAndVerifyPending = async (req, res) => {
       }
       
       // If any transactions were verified, refresh the paginated results
-      // This ensures that status changes appear immediately in the response
       if (verifiedTransactions.length > 0) {
         const updatedTransactions = await Transaction.find({ user: userId })
           .sort({ createdAt: -1 })
@@ -639,18 +573,10 @@ const verifyAllPendingTransactions = async (req, res) => {
   }
 };
 
-// Routes definition
-// Protected route - requires authentication
-router.post('/deposit', authMiddleware, initiateDeposit);
-
-// Public route - used for payment verification callbacks
-router.get('/verify', verifyTransaction);
-
-// Webhook endpoint - receives Paystack event notifications
-router.post('/webhook', handleWebhook);
-
-// Additional verify-payment endpoint from the second implementation
-router.get('/verify-payment', async (req, res) => {
+/**
+ * Alternative verify-payment endpoint
+ */
+const verifyPayment = async (req, res) => {
   try {
     const { reference } = req.query;
 
@@ -763,10 +689,17 @@ router.get('/verify-payment', async (req, res) => {
       error: 'Internal server error'
     });
   }
-});
+};
 
-// Routes for user transactions and verifying pending transactions
+// Routes definition
+// Protected routes - require authentication
+router.post('/deposit', authMiddleware, initiateDeposit);
 router.get('/transactions', authMiddleware, getUserTransactionsAndVerifyPending);
 router.get('/verify-all-pending', authMiddleware, verifyAllPendingTransactions);
+
+// Public routes - no authentication required
+router.get('/verify', verifyTransaction);
+router.get('/verify-payment', verifyPayment);
+router.post('/webhook', handleWebhook);
 
 module.exports = router;

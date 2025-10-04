@@ -20,7 +20,9 @@ const BundleManagement = () => {
       admin: '',
       user: '',
       agent: '',
-      Editor: ''
+      Editor: '',
+      super_agent: '',
+      dealer: '' // Added dealer role
     }
   });
   
@@ -36,7 +38,9 @@ const BundleManagement = () => {
     { id: 'user', label: 'User' },
     { id: 'admin', label: 'Admin' },
     { id: 'agent', label: 'Agent' },
-    { id: 'Editor', label: 'Editor' }
+    { id: 'Editor', label: 'Editor' }, 
+    { id: 'super_agent', label: 'Super Agent' },
+    { id: 'dealer', label: 'Dealer' } // Added Dealer role
   ];
 
   // Fetch bundles by type
@@ -70,7 +74,9 @@ const BundleManagement = () => {
         admin: '',
         user: '',
         agent: '',
-        Editor: ''
+        Editor: '',
+        super_agent: '',
+        dealer: '' // Added dealer role
       }
     });
     if (type) {
@@ -119,7 +125,9 @@ const BundleManagement = () => {
         admin: '',
         user: '',
         agent: '',
-        Editor: ''
+        Editor: '',
+        super_agent: '',
+        dealer: '' // Added dealer role
       }
     });
   };
@@ -188,7 +196,9 @@ const BundleManagement = () => {
           admin: '',
           user: '',
           agent: '',
-          Editor: ''
+          Editor: '',
+          super_agent: '',
+          dealer: '' // Added dealer role
         }
       });
       fetchBundles(selectedType);
@@ -231,7 +241,9 @@ const BundleManagement = () => {
         admin: '',
         user: '',
         agent: '',
-        Editor: ''
+        Editor: '',
+        super_agent: '',
+        dealer: '' // Added dealer role
       }
     });
   };
@@ -307,7 +319,7 @@ const BundleManagement = () => {
                 <div className="space-y-2">
                   {userRoles.map(role => (
                     <div key={role.id} className="flex items-center">
-                      <div className="w-24">
+                      <div className="w-32">
                         <label className="block text-sm font-medium text-black dark:text-white">{role.label} Price:</label>
                       </div>
                       <input
@@ -391,8 +403,8 @@ const BundleManagement = () => {
                             <div className="text-xs space-y-1">
                               {Object.entries(bundle.rolePricing).map(([role, price]) => (
                                 <div key={role} className="flex items-center">
-                                  <span className="font-semibold capitalize w-14 text-black dark:text-white">
-                                    {role}:
+                                  <span className="font-semibold capitalize w-20 text-black dark:text-white">
+                                    {role === 'super_agent' ? 'S.Agent' : role}:
                                   </span>
                                   <span className="text-black dark:text-white">
                                     GH₵ {parseFloat(price).toFixed(2)}

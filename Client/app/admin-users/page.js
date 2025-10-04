@@ -1,4 +1,4 @@
-// pages/admin/users/index.js - Updated for unified admin roles
+// pages/admin/users/index.js - Updated for unified admin roles with dealer
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -520,6 +520,8 @@ export default function UsersManagement() {
         return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
       case 'super_agent':
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      case 'dealer':
+        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
       case 'user':
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
       default:
@@ -535,6 +537,7 @@ export default function UsersManagement() {
       case 'admin': return 'Admin';
       case 'agent': return 'Agent';
       case 'super_agent': return 'Super Agent';
+      case 'dealer': return 'Dealer';
       case 'user': return 'User';
       default: return role || 'user';
     }
@@ -1017,6 +1020,7 @@ export default function UsersManagement() {
                                 <option value="user">User</option>
                                 <option value="agent">Agent</option>
                                 <option value="super_agent">Super Agent</option>
+                                <option value="dealer">Dealer</option>
                                 <option value="Editor">Editor</option>
                                 <option value="wallet_admin">Wallet Admin</option>
                                 <option value="admin">Full Admin</option>
@@ -1028,6 +1032,7 @@ export default function UsersManagement() {
                                 <li><strong>User:</strong> Standard user access</li>
                                 <li><strong>Agent:</strong> Extended user features</li>
                                 <li><strong>Super Agent:</strong> Advanced agent features</li>
+                                <li><strong>Dealer:</strong> Special dealer privileges</li>
                                 <li><strong>Editor:</strong> Can update order statuses</li>
                                 <li><strong>Wallet Admin:</strong> Can credit and debit user wallets</li>
                                 <li><strong>Full Admin:</strong> Complete administrative access</li>

@@ -18,7 +18,8 @@ const BundlePriceList = () => {
     user: '',
     agent: '',
     Editor: '',
-    super_agent: '' // Added super_agent to the state
+    super_agent: '',
+    dealer: '' // Added dealer to the state
   });
   const [updateLoading, setUpdateLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -37,7 +38,8 @@ const BundlePriceList = () => {
     { id: 'user', label: 'User' },
     { id: 'agent', label: 'Agent' },
     { id: 'Editor', label: 'Editor' },
-    { id: 'super_agent', label: 'Super Agent' } // Added Super Agent role
+    { id: 'super_agent', label: 'Super Agent' },
+    { id: 'dealer', label: 'Dealer' } // Added Dealer role
   ];
 
   useEffect(() => {
@@ -100,14 +102,15 @@ const BundlePriceList = () => {
   const startEditing = (bundle) => {
     setEditingBundle(bundle._id);
     
-    // Initialize with current values, including super_agent
+    // Initialize with current values, including dealer
     setEditPrices({
       standard: bundle.price.toString(),
       admin: bundle.rolePricing?.admin?.toString() || bundle.price.toString(),
       user: bundle.rolePricing?.user?.toString() || bundle.price.toString(),
       agent: bundle.rolePricing?.agent?.toString() || bundle.price.toString(),
       Editor: bundle.rolePricing?.Editor?.toString() || bundle.price.toString(),
-      super_agent: bundle.rolePricing?.super_agent?.toString() || bundle.price.toString() // Added super_agent initialization
+      super_agent: bundle.rolePricing?.super_agent?.toString() || bundle.price.toString(),
+      dealer: bundle.rolePricing?.dealer?.toString() || bundle.price.toString() // Added dealer initialization
     });
   };
   
@@ -119,7 +122,8 @@ const BundlePriceList = () => {
       user: '',
       agent: '',
       Editor: '',
-      super_agent: '' // Reset super_agent
+      super_agent: '',
+      dealer: '' // Reset dealer
     });
   };
   
@@ -144,13 +148,14 @@ const BundlePriceList = () => {
     try {
       const token = localStorage.getItem('igettoken');
       
-      // Format role pricing data for API - including super_agent
+      // Format role pricing data for API - including dealer
       const rolePricing = {
         admin: parseFloat(editPrices.admin),
         user: parseFloat(editPrices.user),
         agent: parseFloat(editPrices.agent),
         Editor: parseFloat(editPrices.Editor),
-        super_agent: parseFloat(editPrices.super_agent) // Now properly using the edited value
+        super_agent: parseFloat(editPrices.super_agent),
+        dealer: parseFloat(editPrices.dealer) // Added dealer to API update
       };
       
       await axios.put(`https://keymedia-consult.onrender.com/api/iget/${bundleId}`, {
@@ -297,14 +302,14 @@ const BundlePriceList = () => {
                             <div className="space-y-2">
                               {/* Standard price edit */}
                               <div className="flex items-center">
-                                <span className="text-gray-700 dark:text-gray-300 mr-2 w-20">Standard:</span>
+                                <span className="text-gray-700 dark:text-gray-300 mr-2 w-20 text-xs">Standard:</span>
                                 <div className="flex items-center flex-1">
-                                  <span className="text-gray-700 dark:text-gray-300 mr-1">GH¢</span>
+                                  <span className="text-gray-700 dark:text-gray-300 mr-1 text-xs">GH¢</span>
                                   <input
                                     type="number"
                                     value={editPrices.standard}
                                     onChange={(e) => handlePriceChange('standard', e.target.value)}
-                                    className="flex-grow p-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+                                    className="flex-grow p-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white text-sm"
                                     step="0.01"
                                     min="0"
                                   />
@@ -314,16 +319,16 @@ const BundlePriceList = () => {
                               {/* Role-based prices edit */}
                               {userRoles.map(role => (
                                 <div key={role.id} className="flex items-center">
-                                  <span className="text-gray-700 dark:text-gray-300 mr-2 w-20 capitalize">
-                                    {role.label}:
+                                  <span className="text-gray-700 dark:text-gray-300 mr-2 w-20 capitalize text-xs">
+                                    {role.label === 'Super Agent' ? 'S.Agent' : role.label}:
                                   </span>
                                   <div className="flex items-center flex-1">
-                                    <span className="text-gray-700 dark:text-gray-300 mr-1">GH¢</span>
+                                    <span className="text-gray-700 dark:text-gray-300 mr-1 text-xs">GH¢</span>
                                     <input
                                       type="number"
                                       value={editPrices[role.id]}
                                       onChange={(e) => handlePriceChange(role.id, e.target.value)}
-                                      className="flex-grow p-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+                                      className="flex-grow p-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white text-sm"
                                       step="0.01"
                                       min="0"
                                     />
@@ -391,15 +396,17 @@ const BundlePriceList = () => {
                                   <div className="space-y-1">
                                     {userRoles.map(role => (
                                       <div key={role.id} className="flex justify-between">
-                                        <span className="text-gray-600 dark:text-gray-400 capitalize">{role.label}:</span>
-                                        <span className="text-gray-800 dark:text-gray-200">
+                                        <span className="text-gray-600 dark:text-gray-400 capitalize text-xs">
+                                          {role.label === 'Super Agent' ? 'S.Agent' : role.label}:
+                                        </span>
+                                        <span className="text-gray-800 dark:text-gray-200 text-xs">
                                           GH¢ {parseFloat(bundle.rolePricing[role.id] || bundle.price).toFixed(2)}
                                         </span>
                                       </div>
                                     ))}
                                   </div>
                                 ) : (
-                                  <p className="text-gray-500 dark:text-gray-400">
+                                  <p className="text-gray-500 dark:text-gray-400 text-xs">
                                     No role-specific pricing set
                                   </p>
                                 )}

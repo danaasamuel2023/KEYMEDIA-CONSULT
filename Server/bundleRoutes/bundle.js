@@ -11,6 +11,7 @@ const ROLES = {
   USER: 'user',
   AGENT: 'agent',
   EDITOR: 'Editor',
+  SUPER_AGENT: 'super_agent',
   DEALER: 'dealer'
 };
 

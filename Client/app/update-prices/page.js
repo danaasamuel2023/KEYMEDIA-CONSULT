@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Loader2, RefreshCw, Search, AlertCircle, X, Edit2, Save, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, RefreshCw, Search, AlertCircle, X, Edit2, Save, Check, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import axios from 'axios';
 import AdminLayout from '@/components/adminWraper';
 
@@ -19,7 +19,7 @@ const BundlePriceList = () => {
     agent: '',
     Editor: '',
     super_agent: '',
-    dealer: '' // Added dealer to the state
+    dealer: ''
   });
   const [updateLoading, setUpdateLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -39,12 +39,28 @@ const BundlePriceList = () => {
     { id: 'agent', label: 'Agent' },
     { id: 'Editor', label: 'Editor' },
     { id: 'super_agent', label: 'Super Agent' },
-    { id: 'dealer', label: 'Dealer' } // Added Dealer role
+    { id: 'dealer', label: 'Dealer' }
   ];
 
   useEffect(() => {
     fetchAllBundles();
   }, []);
+
+  // Auto-hide success message after 3 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  // Auto-hide error message after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const fetchAllBundles = async () => {
     setRefreshing(true);
@@ -70,6 +86,7 @@ const BundlePriceList = () => {
       
       await Promise.all(requests);
       setBundleData(results);
+      setError(''); // Clear any existing errors on successful fetch
     } catch (err) {
       setError('Failed to fetch bundle data. Please try again.');
       console.error('Bundle fetch error:', err);
@@ -102,7 +119,7 @@ const BundlePriceList = () => {
   const startEditing = (bundle) => {
     setEditingBundle(bundle._id);
     
-    // Initialize with current values, including dealer
+    // Initialize with current values
     setEditPrices({
       standard: bundle.price.toString(),
       admin: bundle.rolePricing?.admin?.toString() || bundle.price.toString(),
@@ -110,7 +127,7 @@ const BundlePriceList = () => {
       agent: bundle.rolePricing?.agent?.toString() || bundle.price.toString(),
       Editor: bundle.rolePricing?.Editor?.toString() || bundle.price.toString(),
       super_agent: bundle.rolePricing?.super_agent?.toString() || bundle.price.toString(),
-      dealer: bundle.rolePricing?.dealer?.toString() || bundle.price.toString() // Added dealer initialization
+      dealer: bundle.rolePricing?.dealer?.toString() || bundle.price.toString()
     });
   };
   
@@ -123,39 +140,59 @@ const BundlePriceList = () => {
       agent: '',
       Editor: '',
       super_agent: '',
-      dealer: '' // Reset dealer
+      dealer: ''
     });
   };
   
   const handlePriceChange = (role, value) => {
+    // Allow empty string for typing, but validate on save
     setEditPrices(prev => ({
       ...prev,
       [role]: value
     }));
+  };
+
+  const resetToStandardPrice = () => {
+    const standardPrice = editPrices.standard;
+    if (!standardPrice || standardPrice.trim() === '') {
+      setError('Please set a standard price first');
+      return;
+    }
+    
+    setEditPrices({
+      standard: standardPrice,
+      admin: standardPrice,
+      user: standardPrice,
+      agent: standardPrice,
+      Editor: standardPrice,
+      super_agent: standardPrice,
+      dealer: standardPrice
+    });
   };
   
   const updateBundlePrice = async (bundleId, bundleType) => {
     // Validate prices
     for (const [role, price] of Object.entries(editPrices)) {
       if (!price.trim() || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
-        setError(`Invalid price for ${role === 'standard' ? 'standard price' : role} role`);
+        setError(`Invalid price for ${role === 'standard' ? 'standard price' : role} role. Please enter a valid positive number.`);
         return;
       }
     }
     
     setUpdateLoading(true);
+    setError(''); // Clear any existing errors
     
     try {
       const token = localStorage.getItem('igettoken');
       
-      // Format role pricing data for API - including dealer
+      // Format role pricing data for API
       const rolePricing = {
         admin: parseFloat(editPrices.admin),
         user: parseFloat(editPrices.user),
         agent: parseFloat(editPrices.agent),
         Editor: parseFloat(editPrices.Editor),
         super_agent: parseFloat(editPrices.super_agent),
-        dealer: parseFloat(editPrices.dealer) // Added dealer to API update
+        dealer: parseFloat(editPrices.dealer)
       };
       
       await axios.put(`https://keymedia-consult.onrender.com/api/iget/${bundleId}`, {
@@ -185,13 +222,20 @@ const BundlePriceList = () => {
       });
       
       setSuccessMessage('Prices updated successfully');
-      setTimeout(() => setSuccessMessage(''), 3000);
       cancelEditing();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update prices');
+      setError(err.response?.data?.message || 'Failed to update prices. Please try again.');
+      console.error('Update error:', err);
     } finally {
       setUpdateLoading(false);
     }
+  };
+
+  // Calculate discount percentage for role prices
+  const calculateDiscount = (rolePrice, standardPrice) => {
+    if (!rolePrice || !standardPrice || standardPrice === 0) return 0;
+    const discount = ((standardPrice - rolePrice) / standardPrice) * 100;
+    return discount > 0 ? discount.toFixed(1) : 0;
   };
 
   if (loading && !refreshing) {
@@ -208,7 +252,7 @@ const BundlePriceList = () => {
     <AdminLayout>
       <div className="max-w-7xl mx-auto p-4 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bundle Prices</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bundle Price Management</h1>
           
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <div className="relative flex-grow sm:flex-grow-0">
@@ -217,13 +261,13 @@ const BundlePriceList = () => {
                 placeholder="Search bundles..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border rounded-lg w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                className="pl-10 pr-4 py-2 border rounded-lg w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
               {searchTerm && (
                 <button 
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full p-1"
                 >
                   <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                 </button>
@@ -233,7 +277,7 @@ const BundlePriceList = () => {
             <button
               onClick={fetchAllBundles}
               disabled={refreshing}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
             >
               <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -241,28 +285,29 @@ const BundlePriceList = () => {
           </div>
         </div>
 
+        {/* Notifications */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span className="flex-grow">{error}</span>
-            <button onClick={() => setError('')} className="flex-shrink-0">
+            <button onClick={() => setError('')} className="flex-shrink-0 hover:bg-red-100 dark:hover:bg-red-800 rounded-full p-1">
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
         
         {successMessage && (
-          <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg flex items-center gap-2 text-green-700 dark:text-green-400">
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-lg flex items-center gap-2 text-green-700 dark:text-green-400">
             <Check className="w-5 h-5 flex-shrink-0" />
             <span className="flex-grow">{successMessage}</span>
-            <button onClick={() => setSuccessMessage('')} className="flex-shrink-0">
+            <button onClick={() => setSuccessMessage('')} className="flex-shrink-0 hover:bg-green-100 dark:hover:bg-green-800 rounded-full p-1">
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
         {!showAnyResults && !loading && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-4 rounded-lg flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span>
               {searchTerm 
@@ -272,83 +317,109 @@ const BundlePriceList = () => {
           </div>
         )}
 
+        {/* Bundle Cards */}
         <div className="space-y-6">
           {filteredBundleTypes.map((type) => {
             const bundles = filteredBundles(type);
             if (bundles.length === 0) return null;
             
             return (
-              <div key={type} className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{type}</h2>
+              <div key={type} className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    {type.replace(/-/g, ' ').toUpperCase()}
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {bundles.length} bundle{bundles.length !== 1 ? 's' : ''} available
+                  </p>
                 </div>
                 
                 <div className="p-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {bundles.map((bundle) => (
                       <div 
                         key={bundle._id}
-                        className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg"
+                        className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-lg transition-shadow"
                       >
                         {editingBundle === bundle._id ? (
                           // Editing mode
                           <div className="space-y-3">
                             <div className="flex justify-between items-center">
                               <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                                {(bundle.capacity)} GB
+                                {bundle.capacity} GB
+                              </span>
+                              <span className="text-xs bg-yellow-100 dark:bg-yellow-800 text-yellow-700 dark:text-yellow-300 px-2 py-1 rounded">
+                                Editing
                               </span>
                             </div>
                             
                             <div className="space-y-2">
                               {/* Standard price edit */}
                               <div className="flex items-center">
-                                <span className="text-gray-700 dark:text-gray-300 mr-2 w-20 text-xs">Standard:</span>
+                                <span className="text-gray-700 dark:text-gray-300 mr-2 w-20 text-xs font-medium">Standard:</span>
                                 <div className="flex items-center flex-1">
                                   <span className="text-gray-700 dark:text-gray-300 mr-1 text-xs">GH¢</span>
                                   <input
                                     type="number"
                                     value={editPrices.standard}
                                     onChange={(e) => handlePriceChange('standard', e.target.value)}
-                                    className="flex-grow p-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white text-sm"
+                                    className="flex-grow px-2 py-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white text-sm border-gray-300 dark:border-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     step="0.01"
                                     min="0"
+                                    placeholder="0.00"
                                   />
                                 </div>
                               </div>
                               
-                              {/* Role-based prices edit */}
-                              {userRoles.map(role => (
-                                <div key={role.id} className="flex items-center">
-                                  <span className="text-gray-700 dark:text-gray-300 mr-2 w-20 capitalize text-xs">
-                                    {role.label === 'Super Agent' ? 'S.Agent' : role.label}:
-                                  </span>
-                                  <div className="flex items-center flex-1">
-                                    <span className="text-gray-700 dark:text-gray-300 mr-1 text-xs">GH¢</span>
-                                    <input
-                                      type="number"
-                                      value={editPrices[role.id]}
-                                      onChange={(e) => handlePriceChange(role.id, e.target.value)}
-                                      className="flex-grow p-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white text-sm"
-                                      step="0.01"
-                                      min="0"
-                                    />
-                                  </div>
+                              <div className="border-t border-gray-300 dark:border-gray-600 pt-2">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Role Prices:</span>
+                                  <button
+                                    onClick={resetToStandardPrice}
+                                    className="text-xs bg-yellow-100 dark:bg-yellow-800 text-yellow-700 dark:text-yellow-300 px-2 py-1 rounded hover:bg-yellow-200 dark:hover:bg-yellow-700 flex items-center gap-1"
+                                    title="Set all role prices to standard price"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                    Reset
+                                  </button>
                                 </div>
-                              ))}
+                                
+                                {/* Role-based prices edit */}
+                                {userRoles.map(role => (
+                                  <div key={role.id} className="flex items-center mb-1">
+                                    <span className="text-gray-700 dark:text-gray-300 mr-2 w-20 text-xs">
+                                      {role.label === 'Super Agent' ? 'S.Agent' : role.label}:
+                                    </span>
+                                    <div className="flex items-center flex-1">
+                                      <span className="text-gray-700 dark:text-gray-300 mr-1 text-xs">GH¢</span>
+                                      <input
+                                        type="number"
+                                        value={editPrices[role.id]}
+                                        onChange={(e) => handlePriceChange(role.id, e.target.value)}
+                                        className="flex-grow px-2 py-1 border rounded w-full bg-white dark:bg-gray-600 text-gray-900 dark:text-white text-xs border-gray-300 dark:border-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="0.00"
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                             
-                            <div className="flex justify-between mt-2">
+                            <div className="flex justify-between mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
                               <button
                                 onClick={() => updateBundlePrice(bundle._id, type)}
                                 disabled={updateLoading}
-                                className="p-2 text-sm bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 rounded hover:bg-green-200 dark:hover:bg-green-700 flex items-center gap-1"
+                                className="px-3 py-2 text-sm bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 rounded hover:bg-green-200 dark:hover:bg-green-700 flex items-center gap-1 disabled:opacity-50 transition-colors"
                               >
                                 {updateLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                                 Save
                               </button>
                               <button
                                 onClick={cancelEditing}
-                                className="p-2 text-sm bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 flex items-center gap-1"
+                                disabled={updateLoading}
+                                className="px-3 py-2 text-sm bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 flex items-center gap-1 disabled:opacity-50 transition-colors"
                               >
                                 <X className="w-3 h-3" />
                                 Cancel
@@ -358,26 +429,29 @@ const BundlePriceList = () => {
                         ) : (
                           // Display mode
                           <div className="flex flex-col">
-                            <div className="flex justify-between items-center">
+                            <div className="flex justify-between items-center mb-2">
                               <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                                {(bundle.capacity)} GB
+                                {bundle.capacity} GB
                               </span>
                               <button
                                 onClick={() => startEditing(bundle)}
-                                className="p-1 text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                className="p-1.5 text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
                                 title="Edit prices"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
                             </div>
                             
-                            <div className="flex justify-between items-center mt-2">
-                              <div className="text-gray-700 dark:text-gray-300 font-medium">
-                                GH¢ {parseFloat(bundle.price).toFixed(2)}
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Standard:</span>
+                                <span className="text-gray-900 dark:text-gray-100 font-semibold">
+                                  GH¢ {parseFloat(bundle.price).toFixed(2)}
+                                </span>
                               </div>
                               <button 
                                 onClick={() => toggleBundleDetails(bundle._id)}
-                                className="text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                className="text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 p-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
                                 title={expandedBundle === bundle._id ? "Hide role prices" : "Show role prices"}
                               >
                                 {expandedBundle === bundle._id ? (
@@ -390,24 +464,45 @@ const BundlePriceList = () => {
                             
                             {/* Expanded role pricing details */}
                             {expandedBundle === bundle._id && (
-                              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 text-sm">
-                                <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-1">Role Prices:</h4>
-                                {bundle.rolePricing ? (
-                                  <div className="space-y-1">
-                                    {userRoles.map(role => (
-                                      <div key={role.id} className="flex justify-between">
-                                        <span className="text-gray-600 dark:text-gray-400 capitalize text-xs">
-                                          {role.label === 'Super Agent' ? 'S.Agent' : role.label}:
-                                        </span>
-                                        <span className="text-gray-800 dark:text-gray-200 text-xs">
-                                          GH¢ {parseFloat(bundle.rolePricing[role.id] || bundle.price).toFixed(2)}
-                                        </span>
-                                      </div>
-                                    ))}
+                              <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 text-sm">
+                                <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Role-Based Pricing:</h4>
+                                {bundle.rolePricing && Object.keys(bundle.rolePricing).length > 0 ? (
+                                  <div className="space-y-1.5">
+                                    {userRoles.map(role => {
+                                      const rolePrice = bundle.rolePricing[role.id];
+                                      const hasCustomPrice = rolePrice && rolePrice !== bundle.price;
+                                      const discount = calculateDiscount(rolePrice, bundle.price);
+                                      
+                                      return (
+                                        <div key={role.id} className="flex justify-between items-center">
+                                          <span className="text-gray-600 dark:text-gray-400 text-xs">
+                                            {role.label === 'Super Agent' ? 'S.Agent' : role.label}:
+                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            {rolePrice ? (
+                                              <>
+                                                <span className={`text-xs ${hasCustomPrice ? 'text-green-700 dark:text-green-400 font-medium' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                  GH¢ {parseFloat(rolePrice).toFixed(2)}
+                                                </span>
+                                                {hasCustomPrice && discount > 0 && (
+                                                  <span className="text-xs text-green-600 dark:text-green-500 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">
+                                                    -{discount}%
+                                                  </span>
+                                                )}
+                                              </>
+                                            ) : (
+                                              <span className="text-xs text-gray-500 dark:text-gray-400 italic">
+                                                Default (GH¢ {parseFloat(bundle.price).toFixed(2)})
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 ) : (
-                                  <p className="text-gray-500 dark:text-gray-400 text-xs">
-                                    No role-specific pricing set
+                                  <p className="text-gray-500 dark:text-gray-400 text-xs italic">
+                                    No role-specific pricing configured. All roles use standard price.
                                   </p>
                                 )}
                               </div>

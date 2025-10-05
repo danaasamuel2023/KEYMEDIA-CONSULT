@@ -1,4 +1,4 @@
-// pages/admin/users/index.js - Updated for unified admin roles with dealer
+// pages/admin/users/index.js - Updated with Excel export functionality
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -7,6 +7,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import AdminLayout from '@/components/adminWraper';
 import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
 
 export default function UsersManagement() {
   const [users, setUsers] = useState([]);
@@ -28,6 +29,7 @@ export default function UsersManagement() {
   const [animateTotal, setAnimateTotal] = useState(false);
   const [adminPermissions, setAdminPermissions] = useState({});
   const [currentAdmin, setCurrentAdmin] = useState(null);
+  const [exportLoading, setExportLoading] = useState(false);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -45,6 +47,126 @@ export default function UsersManagement() {
   const searchTimeoutRef = useRef(null);
   
   const router = useRouter();
+
+  // Export users to Excel function
+  const exportUsersToExcel = async () => {
+    try {
+      setExportLoading(true);
+      
+      // If we want to export ALL users (not just current page), fetch all users
+      const response = await axios.get('https://keymedia-consult.onrender.com/api/admin/users?limit=1000', {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('igettoken')}`
+        }
+      });
+      
+      let allUsers = [];
+      if (Array.isArray(response.data)) {
+        allUsers = response.data;
+      } else if (response.data && Array.isArray(response.data.users)) {
+        allUsers = response.data.users;
+      } else if (response.data && Array.isArray(response.data.data)) {
+        allUsers = response.data.data;
+      }
+      
+      // Prepare data for export
+      const exportData = allUsers.map(user => ({
+        'Name': user.username || 'N/A',
+        'Phone Number': user.phone || 'N/A',
+        'Email': user.email || 'N/A',
+        'Role': getRoleDisplayName(user.role),
+        'Status': user.isActive ? 'Active' : 'Disabled',
+        'Wallet Balance': `${(user.wallet?.balance || 0).toFixed(2)} ${user.wallet?.currency || 'GHS'}`
+      }));
+
+      // Create a new workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Convert data to worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // Set column widths for better readability
+      const columnWidths = [
+        { wch: 20 }, // Name
+        { wch: 15 }, // Phone Number
+        { wch: 30 }, // Email
+        { wch: 15 }, // Role
+        { wch: 10 }, // Status
+        { wch: 15 }  // Wallet Balance
+      ];
+      ws['!cols'] = columnWidths;
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Users');
+      
+      // Generate filename with current date
+      const date = new Date();
+      const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const filename = `users_export_${dateString}.xlsx`;
+      
+      // Write and download the file
+      XLSX.writeFile(wb, filename);
+      
+      // Show success message
+      alert(`Successfully exported ${allUsers.length} users to Excel`);
+      
+    } catch (err) {
+      console.error('Error exporting users:', err);
+      alert('Failed to export users. Please try again.');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // Export only current page users
+  const exportCurrentPageToExcel = () => {
+    try {
+      // Prepare data for export (current page only)
+      const exportData = users.map(user => ({
+        'Name': user.username || 'N/A',
+        'Phone Number': user.phone || 'N/A',
+        'Email': user.email || 'N/A',
+        'Role': getRoleDisplayName(user.role),
+        'Status': user.isActive ? 'Active' : 'Disabled',
+        'Wallet Balance': `${(user.wallet?.balance || 0).toFixed(2)} ${user.wallet?.currency || 'GHS'}`
+      }));
+
+      // Create a new workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Convert data to worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // Set column widths
+      const columnWidths = [
+        { wch: 20 }, // Name
+        { wch: 15 }, // Phone Number
+        { wch: 30 }, // Email
+        { wch: 15 }, // Role
+        { wch: 10 }, // Status
+        { wch: 15 }  // Wallet Balance
+      ];
+      ws['!cols'] = columnWidths;
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Users');
+      
+      // Generate filename
+      const date = new Date();
+      const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const filename = `users_page${currentPage}_${dateString}.xlsx`;
+      
+      // Write and download the file
+      XLSX.writeFile(wb, filename);
+      
+      // Show success message
+      alert(`Successfully exported ${users.length} users from page ${currentPage}`);
+      
+    } catch (err) {
+      console.error('Error exporting users:', err);
+      alert('Failed to export users. Please try again.');
+    }
+  };
 
   // Debounce search query
   useEffect(() => {
@@ -607,38 +729,85 @@ export default function UsersManagement() {
             </div>
           )}
           
-          {/* Search Bar */}
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              placeholder="Search users..."
-              className="w-full px-4 py-2 pr-10 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-              value={searchQuery}
-              onChange={handleSearchChange}
-            />
-            {searchLoading ? (
-              <div className="absolute right-3 top-2.5">
-                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            ) : searchQuery ? (
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* Export Button */}
+            <div className="relative">
               <button
-                onClick={clearSearch}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                onClick={() => document.getElementById('export-dropdown').classList.toggle('hidden')}
+                className="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center justify-center"
+                disabled={exportLoading}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
+                {exportLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="7 10 12 15 17 10"></polyline>
+                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Export Excel
+                  </>
+                )}
               </button>
-            ) : (
-              <span className="absolute right-3 top-2.5 text-gray-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-              </span>
-            )}
+              <div id="export-dropdown" className="hidden absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5">
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      exportCurrentPageToExcel();
+                      document.getElementById('export-dropdown').classList.add('hidden');
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Export Current Page ({users.length} users)
+                  </button>
+                  <button
+                    onClick={() => {
+                      exportUsersToExcel();
+                      document.getElementById('export-dropdown').classList.add('hidden');
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    disabled={exportLoading}
+                  >
+                    Export All Users
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* Search Bar */}
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Search users..."
+                className="w-full px-4 py-2 pr-10 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                value={searchQuery}
+                onChange={handleSearchChange}
+              />
+              {searchLoading ? (
+                <div className="absolute right-3 top-2.5">
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              ) : searchQuery ? (
+                <button
+                  onClick={clearSearch}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                  </svg>
+                </button>
+              ) : (
+                <span className="absolute right-3 top-2.5 text-gray-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

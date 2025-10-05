@@ -1,4 +1,4 @@
-// Complete MongoDB Schema for Bundle Selling System with Editor functionality
+// Complete MongoDB Schema for Bundle Selling System with all roles included
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
@@ -13,11 +13,11 @@ const userSchema = new Schema({
     enum: [
       'admin',        // Full admin - can do everything
       'user',         // Regular user
-      'agent',
-      'super_agent',        // Agent role
+      'agent',        // Agent role
+      'super_agent',  // Super Agent role
       'Editor',       // Editor role - can update order statuses
-      'wallet_admin',
-      'dealer'  // Unified wallet admin - can both credit and debit user wallets
+      'wallet_admin', // Unified wallet admin - can both credit and debit user wallets
+      'dealer'        // Dealer role
     ], 
     default: 'user' 
   },
@@ -99,6 +99,20 @@ userSchema.methods.updatePermissions = function() {
         canUpdateOrderStatus: true
       };
       break;
+    case 'agent':
+    case 'super_agent':
+    case 'dealer':
+      // These roles have limited permissions
+      this.adminMetadata.permissions = {
+        canViewUsers: false,
+        canViewTransactions: false,
+        canCredit: false,
+        canDebit: false,
+        canChangeRoles: false,
+        canDeleteUsers: false,
+        canUpdateOrderStatus: false
+      };
+      break;
     default:
       this.adminMetadata.permissions = {
         canViewUsers: false,
@@ -114,8 +128,8 @@ userSchema.methods.updatePermissions = function() {
 
 // Pre-save middleware to update permissions and generate API key
 userSchema.pre('save', function(next) {
-  // Generate API key for new users if they need one (agents and admins)
-  if (this.isNew && !this.apiKey && ['agent', 'admin', 'wallet_admin'].includes(this.role)) {
+  // Generate API key for new users if they need one
+  if (this.isNew && !this.apiKey && ['agent', 'super_agent', 'dealer', 'admin', 'wallet_admin'].includes(this.role)) {
     this.generateApiKey();
   }
   
@@ -124,7 +138,7 @@ userSchema.pre('save', function(next) {
     this.adminMetadata.roleChangedAt = new Date();
     
     // Generate API key if role changed to one that needs it
-    if (['agent', 'admin', 'wallet_admin'].includes(this.role) && !this.apiKey) {
+    if (['agent', 'super_agent', 'dealer', 'admin', 'wallet_admin'].includes(this.role) && !this.apiKey) {
       this.generateApiKey();
     }
   }
@@ -181,7 +195,9 @@ userSchema.methods.getRoleDescription = function() {
     'wallet_admin': 'Can view users and perform both credit and debit wallet operations',
     'Editor': 'Can view users and update order statuses',
     'user': 'Regular user with standard features',
-    'agent': 'Agent with extended user features'
+    'agent': 'Agent with extended user features',
+    'super_agent': 'Super Agent with advanced features',
+    'dealer': 'Dealer with special privileges'
   };
   
   return descriptions[this.role] || 'Unknown role';
@@ -197,23 +213,29 @@ userSchema.methods.canUpdateOrderStatus = function() {
   return ['admin', 'Editor'].includes(this.role);
 };
 
-// Bundle Schema with role-based pricing
+// UPDATED Bundle Schema with ALL role-based pricing including super_agent and dealer
 const bundleSchema = new Schema({
-  capacity: { type: Number, required: true }, // Data capacity in MB
+  capacity: { type: Number, required: true }, // Data capacity in GB
   // Base price
   price: { type: Number, required: true },
-  // Role-specific pricing
+  
+  // Role-specific pricing - NOW INCLUDES ALL ROLES
   rolePricing: {
     admin: { type: Number },
     user: { type: Number },
     agent: { type: Number },
-    Editor: { type: Number }
+    Editor: { type: Number },
+    super_agent: { type: Number },  // ADDED
+    dealer: { type: Number }         // ADDED
   },
+  
   type: { 
     type: String, 
     enum: ['mtnup2u', 'mtn-fibre', 'mtn-justforu', 'AT-ishare', 'Telecel-5959', 'AfA-registration', 'other'],
     required: true
   },
+  
+  description: { type: String },
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
@@ -223,6 +245,18 @@ const bundleSchema = new Schema({
 bundleSchema.methods.getPriceForRole = function(role) {
   // If role-specific price exists, return it, otherwise return the base price
   return (this.rolePricing && this.rolePricing[role]) || this.price;
+};
+
+// Method to set all role prices at once
+bundleSchema.methods.setAllRolePrices = function(prices) {
+  this.rolePricing = {
+    admin: prices.admin || this.price,
+    user: prices.user || this.price,
+    agent: prices.agent || this.price,
+    Editor: prices.Editor || this.price,
+    super_agent: prices.super_agent || this.price,
+    dealer: prices.dealer || this.price
+  };
 };
 
 // Enhanced Order Schema with Editor support
@@ -237,7 +271,7 @@ const orderSchema = new Schema({
     enum: ['mtnup2u', 'mtn-fibre', 'mtn-justforu', 'AT-ishare', 'Telecel-5959', 'AfA-registration', 'other'],
     required: true
   },
-  capacity: { type: Number, required: true }, // Data capacity in MB
+  capacity: { type: Number, required: true }, // Data capacity in GB
   price: { type: Number, required: true },
   recipientNumber: { type: String, required: true },
   orderReference: { type: String, unique: true, sparse: true },
@@ -330,7 +364,7 @@ const transactionSchema = new Schema({
   description: { type: String, required: true },
   status: { 
     type: String, 
-    enum: ['pending', 'completed', 'failed','api_error','reward'],
+    enum: ['pending', 'completed', 'failed', 'api_error', 'reward'],
     default: 'pending'
   },
   reference: { type: String, unique: true, sparse: true },
@@ -350,7 +384,7 @@ const transactionSchema = new Schema({
     email: String,
     role: { 
       type: String, 
-      enum: ['admin', 'wallet_admin', 'Editor', 'user', 'agent'] 
+      enum: ['admin', 'wallet_admin', 'Editor', 'user', 'agent', 'super_agent', 'dealer'] 
     },
     actionType: { 
       type: String, 
@@ -439,24 +473,34 @@ const settingsSchema = new Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Create indexes
+// Create indexes for better performance
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ 'wallet.balance': 1 });
+userSchema.index({ apiKey: 1 });
+
+bundleSchema.index({ type: 1, isActive: 1 });
+bundleSchema.index({ capacity: 1 });
+bundleSchema.index({ price: 1 });
 
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
 orderSchema.index({ bundleType: 1 });
 orderSchema.index({ recipientNumber: 1 });
+orderSchema.index({ orderReference: 1 });
 
 transactionSchema.index({ user: 1, createdAt: -1 });
 transactionSchema.index({ status: 1 });
 transactionSchema.index({ type: 1 });
+transactionSchema.index({ reference: 1 });
 
 apiLogSchema.index({ createdAt: -1 });
 apiLogSchema.index({ user: 1 });
 apiLogSchema.index({ endpoint: 1 });
+apiLogSchema.index({ apiKey: 1 });
+
+settingsSchema.index({ name: 1 });
 
 // Create models
 const User = mongoose.model('KeymediaUser', userSchema);

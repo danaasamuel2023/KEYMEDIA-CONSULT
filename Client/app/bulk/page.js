@@ -108,8 +108,9 @@ const BulkPurchaseComponent = () => {
           entries.push({
             recipient,
             capacity,
-            price,
-            lineNumber: index + 1
+            price: parseFloat(price), // Ensure price is a number
+            lineNumber: index + 1,
+            bundleType: bundleType // Include bundle type for each entry
           });
         } else {
           throw new Error(`Line ${index + 1}: Each line must contain both phone number and capacity separated by a space`);
@@ -231,6 +232,7 @@ const BulkPurchaseComponent = () => {
         return;
       }
       
+      // FIXED: Include price and bundleType with each order
       const response = await fetch('https://keymedia-consult.onrender.com/api/orders/bulk-purchase', {
         method: 'POST',
         headers: {
@@ -241,7 +243,9 @@ const BulkPurchaseComponent = () => {
           networkKey: bundleType,
           orders: parsedEntries.map(entry => ({
             recipient: entry.recipient,
-            capacity: entry.capacity
+            capacity: entry.capacity,
+            price: entry.price,           // ADDED: Include price
+            bundleType: entry.bundleType  // ADDED: Include bundleType
           }))
         })
       });

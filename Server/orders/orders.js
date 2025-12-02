@@ -1,4 +1,4 @@
-// routes/orders.js - Complete updated file with DataWorks API integration
+// routes/orders.js - Complete updated file with DataHub Ghana API integration
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();
@@ -19,10 +19,10 @@ const SMS_CONFIG = {
   BASE_URL: 'https://apps.mnotify.net/smsapi'
 };
 
-// DataWorks API configuration
-const DATAWORKS_CONFIG = {
-  API_URL: 'https://api.dataworksgh.com/api/abusua.php',
-  SUPER_AGENT_EMAIL: process.env.DATAWORKS_AGENT_EMAIL || 'keymediaconsult34@gmail.com' // Set this in your .env file
+// DataHub Ghana API configuration
+const DATAHUB_CONFIG = {
+  API_URL: 'https://user.datahubgh.com/api/external/data-purchase',
+  API_KEY: process.env.DATAHUB_API_KEY || 'sk_43f226cf0b59cdc4dd8dad2dde4aed372406932cb4030996'
 };
 
 // Middleware for Editor-only actions
@@ -117,67 +117,127 @@ const formatPhoneNumberForMnotify = (phone) => {
 };
 
 /**
- * Call DataWorks API for MTN UP2U orders
+ * Format phone number for DataHub API (10 digits starting with 0)
+ * @param {string} phone - Phone number to format
+ * @returns {string} - Formatted phone number
+ */
+const formatPhoneForDataHub = (phone) => {
+  if (!phone) return '';
+  
+  // Remove all non-numeric characters
+  let cleaned = phone.replace(/\D/g, '');
+  
+  // If starts with 233, replace with 0
+  if (cleaned.startsWith('233')) {
+    cleaned = '0' + cleaned.substring(3);
+  }
+  
+  // If doesn't start with 0, add it
+  if (!cleaned.startsWith('0')) {
+    cleaned = '0' + cleaned;
+  }
+  
+  // Ensure it's exactly 10 digits
+  if (cleaned.length !== 10) {
+    throw new Error('Phone number must be exactly 10 digits');
+  }
+  
+  return cleaned;
+};
+
+/**
+ * Get network key for DataHub API based on bundle type
+ * @param {string} bundleType - Bundle type from order
+ * @returns {string} - Network key for DataHub API
+ */
+const getDataHubNetworkKey = (bundleType) => {
+  const type = bundleType?.toLowerCase() || '';
+  
+  if (type.includes('mtn') || type === 'mtnup2u' || type === 'yello') {
+    return 'YELLO'; // MTN
+  } else if (type.includes('telecel') || type.includes('vodafone')) {
+    return 'TELECEL'; // Telecel/Vodafone
+  } else if (type.includes('airtel') || type.includes('tigo') || type.includes('at')) {
+    return 'AT'; // AirtelTigo
+  }
+  
+  return 'YELLO'; // Default to MTN
+};
+
+/**
+ * Call DataHub Ghana API for data purchase
  * @param {string} recipientNumber - Recipient phone number
- * @param {number} gig - Data size in GB
- * @param {string} referenceId - Unique reference ID
+ * @param {number} capacity - Data size in GB
+ * @param {string} networkKey - Network key (YELLO, TELECEL, AT)
  * @returns {Promise<Object>} - API response
  */
-const callDataWorksAPI = async (recipientNumber, gig, referenceId) => {
+const callDataHubAPI = async (recipientNumber, capacity, networkKey = 'YELLO') => {
   try {
-    // Ensure recipient number is exactly 10 digits
-    const formattedRecipient = recipientNumber.replace(/\D/g, '');
-    if (formattedRecipient.length !== 10) {
-      throw new Error('Recipient number must be exactly 10 digits');
-    }
-
-    const data = {
-      super_agent_email: DATAWORKS_CONFIG.SUPER_AGENT_EMAIL,
-      recipient_number: formattedRecipient,
-      network: 'MTN',
-      gig: gig,
-      reference_id: referenceId
+    // Format recipient number for DataHub (10 digits starting with 0)
+    const formattedRecipient = formatPhoneForDataHub(recipientNumber);
+    
+    const requestData = {
+      networkKey: networkKey,
+      capacity: String(capacity), // DataHub expects string
+      recipient: formattedRecipient
     };
 
-    console.log('📡 Calling DataWorks API with data:', {
-      ...data,
-      super_agent_email: '***' // Hide email in logs
+    console.log('📡 Calling DataHub Ghana API with data:', {
+      ...requestData,
+      apiKey: '***hidden***'
     });
 
-    const response = await axios.post(DATAWORKS_CONFIG.API_URL, data, {
+    const response = await axios.post(DATAHUB_CONFIG.API_URL, requestData, {
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-API-Key': DATAHUB_CONFIG.API_KEY
       },
       timeout: 30000 // 30 second timeout
     });
 
-    console.log('DataWorks API Response:', response.data);
+    console.log('DataHub Ghana API Response:', response.data);
 
     // Check for successful response
-    if (response.status === 200 || (response.data && response.data.status === 200)) {
+    if (response.data && response.data.success === true) {
       return {
         success: true,
-        message: response.data.message || 'Successful',
+        message: response.data.message || 'Data purchase successful',
         data: response.data
       };
     } else {
+      // Handle error responses
       return {
         success: false,
-        message: response.data.message || 'API call failed',
+        message: response.data?.error || response.data?.message || 'API call failed',
         data: response.data
       };
     }
 
   } catch (error) {
-    console.error('DataWorks API Error:', error.message);
+    console.error('DataHub Ghana API Error:', error.message);
+    
     if (error.response) {
       console.error('API Error Response:', error.response.data);
+      
+      // Handle specific error messages from DataHub
+      const errorMessage = error.response.data?.error || error.response.data?.message || 
+                          `API Error: ${error.response.status} - ${error.response.statusText}`;
+      
       return {
         success: false,
-        message: `API Error: ${error.response.status} - ${error.response.statusText}`,
+        message: errorMessage,
         error: error.response.data
       };
     }
+    
+    if (error.code === 'ECONNABORTED') {
+      return {
+        success: false,
+        message: 'API request timeout - please try again',
+        error: error
+      };
+    }
+    
     return {
       success: false,
       message: error.message,
@@ -759,11 +819,14 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
     if (status === 'completed' && order.bundleType.toLowerCase() === 'mtnup2u' && retryAPI) {
       console.log('🔄 Editor requested API retry for MTN UP2U order...');
       
-      const gigValue = order.capacity >= 1000 ? order.capacity / 1000 : order.capacity;
-      const apiCallResult = await callDataWorksAPI(
+      // Convert capacity to GB for DataHub API
+      const capacityInGB = order.capacity >= 1000 ? order.capacity / 1000 : order.capacity;
+      const networkKey = getDataHubNetworkKey(order.bundleType);
+      
+      const apiCallResult = await callDataHubAPI(
         order.recipientNumber,
-        gigValue,
-        order.orderReference
+        capacityInGB,
+        networkKey
       );
       
       if (!apiCallResult.success) {
@@ -782,7 +845,8 @@ router.put('/:id/status', adminAuth, requireEditor, validateModelsAndDb, async (
           success: true,
           message: apiCallResult.message,
           timestamp: new Date(),
-          retriedBy: req.user.username
+          retriedBy: req.user.username,
+          provider: 'DataHub Ghana'
         }
       };
     }
@@ -1055,7 +1119,7 @@ router.get('/trends/weekly', adminAuth, validateModelsAndDb, async (req, res) =>
   }
 });
 
-// POST place order (main endpoint - WITH DATAWORKS API INTEGRATION FOR MTN UP2U)
+// POST place order (main endpoint - WITH DATAHUB GHANA API INTEGRATION FOR MTN UP2U)
 router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
   try {
     const { recipientNumber, capacity, price, bundleType } = req.body;
@@ -1098,26 +1162,27 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
       let apiCallResult = null;
       let apiReference = null;
       
-      // Only call DataWorks API if bundle type is mtnup2u
+      // Only call DataHub Ghana API if bundle type is mtnup2u
       if (bundleType.toLowerCase() === 'mtnup2u') {
-        console.log('🔄 Processing MTN UP2U order - calling DataWorks API...');
+        console.log('🔄 Processing MTN UP2U order - calling DataHub Ghana API...');
         
         // Convert capacity from MB to GB for the API
-        const gigValue = capacity >= 1000 ? capacity / 1000 : capacity;
+        const capacityInGB = capacity >= 1000 ? capacity / 1000 : capacity;
+        const networkKey = getDataHubNetworkKey(bundleType);
         
-        // Call DataWorks API
-        apiCallResult = await callDataWorksAPI(
+        // Call DataHub Ghana API
+        apiCallResult = await callDataHubAPI(
           recipientNumber,
-          gigValue,
-          orderReference
+          capacityInGB,
+          networkKey
         );
         
         if (apiCallResult.success) {
-          console.log('✅ DataWorks API call successful');
+          console.log('✅ DataHub Ghana API call successful');
           initialStatus = 'completed'; // Set to completed if API call succeeds
           apiReference = orderReference; // Store the reference used with the API
         } else {
-          console.log('❌ DataWorks API call failed:', apiCallResult.message);
+          console.log('❌ DataHub Ghana API call failed:', apiCallResult.message);
           // Keep status as pending so Editor can retry manually
           initialStatus = 'pending';
         }
@@ -1140,7 +1205,8 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
             apiResponse: {
               success: apiCallResult.success,
               message: apiCallResult.message,
-              timestamp: new Date()
+              timestamp: new Date(),
+              provider: 'DataHub Ghana'
             }
           })
         }
@@ -1154,7 +1220,7 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
           previousStatus: 'pending',
           newStatus: 'completed',
           statusChangedAt: new Date(),
-          note: 'Auto-completed via DataWorks API'
+          note: 'Auto-completed via DataHub Ghana API'
         };
       }
       
@@ -1240,7 +1306,8 @@ router.post('/placeorder', auth, validateModelsAndDb, async (req, res) => {
             enabled: bundleType.toLowerCase() === 'mtnup2u',
             attempted: !!apiCallResult,
             success: apiCallResult?.success || false,
-            message: apiCallResult?.message || null
+            message: apiCallResult?.message || null,
+            provider: 'DataHub Ghana'
           }
         }
       });
@@ -1349,7 +1416,7 @@ router.get('/today/admin', adminAuth, validateModelsAndDb, async (req, res) => {
   }
 });
 
-// Bulk purchase endpoint with DataWorks API support
+// Bulk purchase endpoint with DataHub Ghana API support
 router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
   // Start a mongoose session for transaction
   const session = await mongoose.startSession();
@@ -1405,18 +1472,19 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
         const numbers = Math.floor(100000 + Math.random() * 900000).toString();
         const reference = `${prefix}${numbers}`;
         
-        // Determine if we should call DataWorks API
+        // Determine if we should call DataHub Ghana API
         let orderStatus = 'pending';
         let apiCallResult = null;
         
         if (isMtnBulk) {
           console.log('🔄 Processing MTN UP2U bulk order item...');
-          const gigValue = orderData.capacity >= 1000 ? orderData.capacity / 1000 : orderData.capacity;
+          const capacityInGB = orderData.capacity >= 1000 ? orderData.capacity / 1000 : orderData.capacity;
+          const dataHubNetworkKey = getDataHubNetworkKey(orderData.bundleType || networkKey);
           
-          apiCallResult = await callDataWorksAPI(
+          apiCallResult = await callDataHubAPI(
             orderData.recipient,
-            gigValue,
-            reference
+            capacityInGB,
+            dataHubNetworkKey
           );
           
           if (apiCallResult.success) {
@@ -1443,7 +1511,8 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
               apiResponse: {
                 success: apiCallResult.success,
                 message: apiCallResult.message,
-                timestamp: new Date()
+                timestamp: new Date(),
+                provider: 'DataHub Ghana'
               }
             })
           }
@@ -1455,7 +1524,7 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
             previousStatus: 'pending',
             newStatus: 'completed',
             statusChangedAt: new Date(),
-            note: 'Auto-completed via DataWorks API (bulk order)'
+            note: 'Auto-completed via DataHub Ghana API (bulk order)'
           };
         }
 
@@ -1554,7 +1623,7 @@ router.post('/bulk-purchase', auth, validateModelsAndDb, async (req, res) => {
           : 'All orders are pending and require Editor approval before processing',
         apiIntegration: {
           enabled: isMtnBulk,
-          provider: 'DataWorks'
+          provider: 'DataHub Ghana'
         }
       }
     });
